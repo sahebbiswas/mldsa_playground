@@ -1,0 +1,5 @@
+{
+  "name": "ML-DSA Signature Inspector",
+  "description": "A technical utility for inspecting, verifying, and analyzing ML-DSA (FIPS 204) digital signatures and commitments.",
+  "requestFramePermissions": []
+}
