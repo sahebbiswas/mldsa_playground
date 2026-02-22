@@ -128,6 +128,7 @@ export default function App() {
   const [inspectMode, setInspectMode] = useState<SignMode>('pure');
   const [inspectContext, setInspectContext] = useState('');
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
+  const [inspectLegacy, setInspectLegacy] = useState(false);
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
 
@@ -157,7 +158,12 @@ export default function App() {
   const handleInspect = async () => {
     if (!publicKey || !signature || !message) return;
     setIsInspecting(true);
-    const opts: SigningOptions = { mode: inspectMode, contextText: inspectContext, hashAlg: inspectHashAlg };
+    const opts: SigningOptions = {
+      mode: inspectMode,
+      contextText: inspectContext,
+      hashAlg: inspectHashAlg,
+      checkLegacyMode: inspectLegacy
+    };
     const res = await inspectSignature(variant, publicKey, signature, message, opts);
     setResult(res);
     setIsInspecting(false);
@@ -284,6 +290,7 @@ export default function App() {
     setInspectContext(signContext);
     setInspectHashAlg(signHashAlg);
     if (signMode === 'hash-ml-dsa' || signContext) setShowAdvancedVerify(true);
+    setInspectLegacy(false);
     setActiveTab('inspect');
     setResult(null);
   };
@@ -339,11 +346,14 @@ if __name__ == "__main__":
   /** Signing / Verify options panel (shared between sign + inspect tabs) */
   const AdvancedOptions = ({
     mode, onModeChange, context, onContextChange, hashAlg, onHashAlgChange, label,
+    inspectLegacy, onInspectLegacyChange
   }: {
     mode: SignMode; onModeChange: (m: SignMode) => void;
     context: string; onContextChange: (c: string) => void;
     hashAlg: HashAlg; onHashAlgChange: (h: HashAlg) => void;
     label?: string;
+    inspectLegacy?: boolean;
+    onInspectLegacyChange?: (v: boolean) => void;
   }) => (
     <div className="space-y-4 p-4 border border-[#141414]/20 bg-[#141414]/3 rounded-sm">
       {label && <p className="text-[10px] uppercase font-bold opacity-40 tracking-wider">{label}</p>}
@@ -408,6 +418,21 @@ if __name__ == "__main__":
           </p>
         )}
       </div>
+
+      {/* Experimental Legacy Mode Checkbox - if props exist to toggle it */}
+      {onInspectLegacyChange && (
+        <label className="flex items-center gap-2 mt-4 pt-4 border-t border-[#141414]/10 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!inspectLegacy}
+            onChange={(e) => onInspectLegacyChange(e.target.checked)}
+            className="w-3 h-3 accent-[#141414]"
+          />
+          <span className="text-[10px] uppercase font-bold opacity-60">
+            Experimental: Test legacy CRYSTALS-Dilithium verification
+          </span>
+        </label>
+      )}
     </div>
   );
 
@@ -579,6 +604,8 @@ if __name__ == "__main__":
                         mode={inspectMode} onModeChange={setInspectMode}
                         context={inspectContext} onContextChange={setInspectContext}
                         hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
+                        // @ts-ignore - passing optional props for the legacy switch
+                        inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
                       />
                     )}
                   </div>
@@ -764,6 +791,39 @@ if __name__ == "__main__":
                               The lattice reconstruction (A·z − c·t₁·2^d → UseHint → w'₁) is performed by the noble library. Steps 1–4 above are independently derived from inputs.
                             </p>
                           </div>
+
+                          {/* Legacy Mode Extra Box */}
+                          {result.legacyValid !== undefined && (
+                            <div className={cn(
+                              'p-4 border space-y-3 mt-4',
+                              result.legacyValid ? 'border-orange-300 bg-orange-50' : 'border-[#141414]/10 bg-white',
+                            )}>
+                              <div className="flex items-center gap-2 border-b border-[#141414]/10 pb-2 mb-2">
+                                <Layers size={14} className={result.legacyValid ? 'text-orange-700' : 'opacity-40'} />
+                                <span className={cn('text-[10px] uppercase font-bold tracking-wider', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
+                                  Legacy CRYSTALS-Dilithium Check
+                                </span>
+                              </div>
+
+                              <HexPreview
+                                label="Legacy μ = SHAKE256(tr ∥ msg)"
+                                hex={result.legacyMuHex || ''}
+                                bytes={64}
+                              />
+
+                              <div className="flex items-center gap-3 pt-2">
+                                {result.legacyValid
+                                  ? <CheckCircle2 size={16} className="text-orange-600 shrink-0" />
+                                  : <XCircle size={16} className="text-[#141414]/30 shrink-0" />
+                                }
+                                <p className={cn('text-xs font-mono', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
+                                  {result.legacyValid
+                                    ? 'Legacy Verification Successful. This signature was matched using the old Dilithium 2/3/5 standard formulation (no M\' context).'
+                                    : 'Legacy Verification Failed. This is expected if the signature was generated under the final FIPS 204 standard.'}
+                                </p>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

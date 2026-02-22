@@ -14,11 +14,14 @@ export interface SigningOptions {
   mode: SignMode;
   contextText: string;  // UTF-8 text → encoded to bytes before use
   hashAlg: HashAlg;  // only used when mode === 'hash-ml-dsa'
+  checkLegacyMode?: boolean; // experimental: also check against old CRYSTALS-Dilithium formulation
 }
 
 export interface InspectionResult {
   valid: boolean;
   error?: string;
+  legacyValid?: boolean;
+  legacyMuHex?: string;
   meta?: {
     mode: SignMode;
     hashAlg?: HashAlg;
@@ -131,7 +134,37 @@ export const inspectSignature = async (
       });
     }
 
-    // ── SHAKE256 reconstruction ──────────────────────────────────────────────
+    // ── Experimental Legacy Check ──────────────────────────────────────────
+    let legacyValid: boolean | undefined;
+    let legacyMuHex: string | undefined;
+
+    // tr = SHAKE256(pk, dkLen=64)
+    const tr = shake256(pk, { dkLen: 64 });
+    const trHex = uint8ArrayToHex(tr);
+
+    if (opts.checkLegacyMode) {
+      // Legacy CRYSTALS-Dilithium did not prepend M' prefixes or contexts.
+      // μ = SHAKE256(tr || msg)
+      const legacyMu = shake256(concatBytes(tr, msg), { dkLen: 64 });
+      legacyMuHex = uint8ArrayToHex(legacyMu);
+
+      try {
+        // internal.verify allows externalMu to bypass getMessage()
+        legacyValid = (instance as any).internal.verify(sig, legacyMu, pk, { externalMu: true });
+      } catch (e) {
+        legacyValid = false;
+      }
+    }
+
+    // M' reconstruction
+    const mPrime = buildMPrime(opts.mode, contextBytes, msg, opts.hashAlg);
+    const mPrimeHex = uint8ArrayToHex(mPrime);
+
+    // μ = SHAKE256(tr ∥ M', dkLen=64)
+    const mu = shake256(concatBytes(tr, mPrime), { dkLen: 64 });
+    const muHex = uint8ArrayToHex(mu);
+
+    // ── SHAKE256 reconstruction metadata ─────────────────────────────────────
     const challengeByteLen = C_TILDE_BYTES[variant];
     const challengeHex = sig.length >= challengeByteLen
       ? uint8ArrayToHex(sig.slice(0, challengeByteLen))
@@ -143,20 +176,10 @@ export const inspectSignature = async (
       ? uint8ArrayToHex(sig.slice(Math.max(0, sig.length - 32)))
       : '';
 
-    // tr = SHAKE256(pk, dkLen=64)
-    const tr = shake256(pk, { dkLen: 64 });
-    const trHex = uint8ArrayToHex(tr);
-
-    // M' reconstruction
-    const mPrime = buildMPrime(opts.mode, contextBytes, msg, opts.hashAlg);
-    const mPrimeHex = uint8ArrayToHex(mPrime);
-
-    // μ = SHAKE256(tr ∥ M', dkLen=64)
-    const mu = shake256(concatBytes(tr, mPrime), { dkLen: 64 });
-    const muHex = uint8ArrayToHex(mu);
-
     return {
       valid: isValid,
+      legacyValid,
+      legacyMuHex,
       meta: {
         mode: opts.mode,
         hashAlg: opts.mode === 'hash-ml-dsa' ? opts.hashAlg : undefined,
