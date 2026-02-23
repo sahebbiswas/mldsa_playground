@@ -1,3 +1,5 @@
+[![CI](https://github.com/sahebbiswas/mldsa_playground/actions/workflows/ci.yml/badge.svg)](https://github.com/sahebbiswas/mldsa_playground/actions/workflows/ci.yml)
+
 # ML-DSA Inspector Playground
 
 A web-based interactive utility for exploring and verifying Post-Quantum Digital Signatures using the **NIST FIPS 204** standard (ML-DSA / CRYSTALS-Dilithium).
