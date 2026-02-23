@@ -13,22 +13,30 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
 - **Experimental Legacy Checks:** Includes a testing mode to check if signatures were generated with older CRYSTALS-Dilithium standards rather than final FIPS 204 formulas.
 - **Export & Import:** Swap keys, signatures, and payloads using JSON bundles or raw binary (`.bin`) files.
-- **Python Reference:** View equivalent backend integration code using `liboqs-python`.
+- **Automated Tests:** Comprehensive unit test suite using `vitest` covering all cryptographic variants and message types.
+- **CI/CD:** Automated GitHub Actions workflow to ensure build stability and test integrity on every push.
 
 ## Getting Started
 
-**Prerequisites:** Node.js 18+
+### Installation
+```bash
+npm install
+```
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. *(Optional)* If using external APIs or plugins, set your `GEMINI_API_KEY` in `.env.local`.
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+### Development
+```bash
+npm run dev
+```
+
+### Testing
+```bash
+npm run test
+```
+
+### Production Build
+```bash
+npm run build
+```
 
 ## Deployment (Web Service)
 

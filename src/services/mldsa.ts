@@ -53,10 +53,20 @@ const C_TILDE_BYTES: Record<MLDSAVariant, number> = {
 };
 
 /** NIST hash functions with `.oid` property required by noble's prehash API. */
+const SHA256_OID = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
+const SHA384_OID = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02]);
+const SHA512_OID = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03]);
+
+const wrapHash = (fn: any, oid: Uint8Array) => {
+  const wrapped = (msg: Uint8Array) => fn(msg);
+  wrapped.oid = oid;
+  return wrapped;
+};
+
 export const HASH_FNS: Record<HashAlg, any> = {
-  'SHA-256': sha256,
-  'SHA-384': sha384,
-  'SHA-512': sha512,
+  'SHA-256': wrapHash(sha256, SHA256_OID),
+  'SHA-384': wrapHash(sha384, SHA384_OID),
+  'SHA-512': wrapHash(sha512, SHA512_OID),
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
