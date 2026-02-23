@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     plugins: [react(), tailwindcss()],
+    base: process.env.GITHUB_ACTIONS === 'true' ? '/mldsa-inspector/' : '/',
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       '__APP_VERSION__': JSON.stringify(pkg.version),
