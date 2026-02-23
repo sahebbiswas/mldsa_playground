@@ -1335,6 +1335,7 @@ if __name__ == "__main__":
             <a href="#" className="hover:opacity-100">FIPS 204 Standard</a>
             <a href="#" className="hover:opacity-100">NIST PQC</a>
             <a href="#" className="hover:opacity-100">Documentation</a>
+            <a href="https://github.com/sahebbiswas/mldsa_playground" target="_blank" rel="noreferrer" className="hover:opacity-100 text-violet-300">GitHub (sahebbiswas/mldsa_playground)</a>
           </div>
           <p className="text-[10px] opacity-40 font-mono">&copy; 2026 CRYPTO-LABS. ALL RIGHTS RESERVED.</p>
         </div>
