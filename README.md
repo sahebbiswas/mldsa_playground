@@ -8,9 +8,11 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Pure ML-DSA & HashML-DSA:** Supports standard signing, as well as HashML-DSA with pre-hashing (SHA-256, SHA-384, SHA-512).
 - **Context Strings:** Full support for FIPS 204 context strings (up to 255 bytes).
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
-- **X.509 Certificates:** Parses and verifies ML-DSA signatures embedded in X.509 Certificates (DER, PEM). Supports extracting Subject, Issuer, Validity periods, and OID signature variance mapping.
+- **Binary Payload Support [NEW]:** Import raw `.bin` files for payloads/messages in both signing and verification. Features dynamic byte counting and visual HEX badges.
+- **X.509 Certificates [NEW]:** Parses and verifies ML-DSA signatures embedded in X.509 Certificates (DER, PEM). Supports extracting Subject, Issuer, Validity periods, and OID signature variance mapping.
+- **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
 - **Experimental Legacy Checks:** Includes a testing mode to check if signatures were generated with older CRYSTALS-Dilithium standards rather than final FIPS 204 formulas.
-- **Export & Import:** Swap keys and signatures using JSON bundles or raw binary (`.bin`) files.
+- **Export & Import:** Swap keys, signatures, and payloads using JSON bundles or raw binary (`.bin`) files.
 - **Python Reference:** View equivalent backend integration code using `liboqs-python`.
 
 ## Getting Started

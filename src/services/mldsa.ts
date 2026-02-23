@@ -108,14 +108,14 @@ export const inspectSignature = async (
   variant: MLDSAVariant,
   publicKeyHex: string,
   signatureHex: string,
-  message: string,
+  message: string | Uint8Array,
   opts: SigningOptions,
 ): Promise<InspectionResult> => {
   try {
     const instance = getMLDSAInstance(variant);
     const pk = hexToUint8Array(publicKeyHex);
     const sig = hexToUint8Array(signatureHex);
-    const msg = new TextEncoder().encode(message);
+    const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
     const contextBytes = new TextEncoder().encode(opts.contextText);
     const contextHex = uint8ArrayToHex(contextBytes);
 
@@ -217,12 +217,12 @@ export const generateKeyPair = (variant: MLDSAVariant) => {
 export const signMessage = (
   variant: MLDSAVariant,
   privateKeyHex: string,
-  message: string,
+  message: string | Uint8Array,
   opts: SigningOptions,
 ): string => {
   const instance = getMLDSAInstance(variant);
   const sk = hexToUint8Array(privateKeyHex);
-  const msg = new TextEncoder().encode(message);
+  const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
   const contextBytes = new TextEncoder().encode(opts.contextText);
   const ctxOpt = contextBytes.length ? { context: contextBytes } : {};
 

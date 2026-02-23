@@ -138,17 +138,20 @@ export default function App() {
   const [inspectContext, setInspectContext] = useState('');
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
   const [inspectLegacy, setInspectLegacy] = useState(false);
+  const [isMessageBinary, setIsMessageBinary] = useState(false);
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
 
   // Inspect binary import refs
   const inspectPubBinRef = useRef<HTMLInputElement>(null);
   const inspectSigBinRef = useRef<HTMLInputElement>(null);
+  const inspectMessageBinRef = useRef<HTMLInputElement>(null);
 
   // ── Generate / Sign tab state ────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
+  const [isGenMessageBinary, setIsGenMessageBinary] = useState(false);
   const [genSignature, setGenSignature] = useState('');
   const [signMode, setSignMode] = useState<SignMode>('pure');
   const [signContext, setSignContext] = useState('');
@@ -161,6 +164,7 @@ export default function App() {
   const importPubBinRef = useRef<HTMLInputElement>(null);
   const importPrivBinRef = useRef<HTMLInputElement>(null);
   const importSigBinRef = useRef<HTMLInputElement>(null);
+  const importGenMessageBinRef = useRef<HTMLInputElement>(null);
 
   // ── X.509 tab state ───────────────────────────────────────────────────────
   const [x509Result, setX509Result] = useState<X509ParseResult | null>(null);
@@ -180,7 +184,8 @@ export default function App() {
       hashAlg: inspectHashAlg,
       checkLegacyMode: inspectLegacy
     };
-    const res = await inspectSignature(variant, publicKey, signature, message, opts);
+    const msgInput = isMessageBinary ? hexToUint8Array(message) : message;
+    const res = await inspectSignature(variant, publicKey, signature, msgInput, opts);
     setResult(res);
     setIsInspecting(false);
   };
@@ -209,6 +214,19 @@ export default function App() {
     e.target.value = '';
   };
 
+  const handleImportMessageBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInspectImportError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const bytes = await readBinFile(file);
+      setMessage(uint8ArrayToHex(bytes));
+      setIsMessageBinary(true);
+      setResult(null);
+    } catch { setInspectImportError('Failed to read binary message file.'); }
+    e.target.value = '';
+  };
+
   // ── Key gen / sign handlers ───────────────────────────────────────────────
 
   const handleGenerateKeys = () => { setGenKeys(generateKeyPair(variant)); setGenSignature(''); };
@@ -216,7 +234,8 @@ export default function App() {
   const handleSign = () => {
     if (!genKeys) return;
     const opts: SigningOptions = { mode: signMode, contextText: signContext, hashAlg: signHashAlg };
-    const sig = signMessage(variant, genKeys.privateKey, genMessage, opts);
+    const msgInput = isGenMessageBinary ? hexToUint8Array(genMessage) : genMessage;
+    const sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
     setGenSignature(sig);
   };
 
@@ -363,11 +382,25 @@ export default function App() {
     e.target.value = '';
   };
 
+  const handleImportGenMessageBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    setImportError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const bytes = await readBinFile(file);
+      setGenMessage(uint8ArrayToHex(bytes));
+      setIsGenMessageBinary(true);
+      setGenSignature('');
+    } catch { setImportError('Failed to read binary message file.'); }
+    e.target.value = '';
+  };
+
   // "Send to Inspector" — also mirrors mode/context/hashAlg
   const sendToInspector = () => {
     setPublicKey(genKeys?.publicKey || '');
     setSignature(genSignature);
     setMessage(genMessage);
+    setIsMessageBinary(isGenMessageBinary);
     setInspectMode(signMode);
     setInspectContext(signContext);
     setInspectHashAlg(signHashAlg);
@@ -413,10 +446,11 @@ if __name__ == "__main__":
     <div className="flex gap-3 flex-wrap items-center">{children}</div>
   );
 
-  const TinyBtn = ({ onClick, disabled, className, children }: {
-    onClick: () => void; disabled?: boolean; className?: string; children: React.ReactNode;
+  const TinyBtn = ({ onClick, disabled, className, children, title }: {
+    onClick: () => void; disabled?: boolean; className?: string; children: React.ReactNode; title?: string;
   }) => (
     <button
+      title={title}
       onClick={onClick}
       disabled={disabled}
       className={cn('text-[10px] flex items-center gap-1 hover:underline disabled:opacity-30', className)}
@@ -610,6 +644,7 @@ if __name__ == "__main__":
                 {/* Hidden binary inputs */}
                 <input ref={inspectPubBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportPubKeyBin} className="hidden" />
                 <input ref={inspectSigBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportSigBin} className="hidden" />
+                <input ref={inspectMessageBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportMessageBin} className="hidden" />
 
                 {inspectImportError && (
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -635,10 +670,10 @@ if __name__ == "__main__":
                         )}
                       </label>
                       <ActionRow>
-                        <TinyBtn onClick={() => { setInspectImportError(null); inspectPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                        <TinyBtn title="Import a raw binary public key from a .bin file" onClick={() => { setInspectImportError(null); inspectPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
                           <Upload size={10} /> Import .bin
                         </TinyBtn>
-                        <TinyBtn onClick={() => publicKey && downloadBinary(`mldsa-pubkey-inspect.bin`, hexToUint8Array(publicKey))} disabled={!publicKey} className="opacity-60 hover:opacity-100">
+                        <TinyBtn title="Save the current public key as a raw binary .bin file" onClick={() => publicKey && downloadBinary(`mldsa-pubkey-inspect.bin`, hexToUint8Array(publicKey))} disabled={!publicKey} className="opacity-60 hover:opacity-100">
                           <Download size={10} /> Export .bin
                         </TinyBtn>
                       </ActionRow>
@@ -664,10 +699,10 @@ if __name__ == "__main__":
                         )}
                       </label>
                       <ActionRow>
-                        <TinyBtn onClick={() => { setInspectImportError(null); inspectSigBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                        <TinyBtn title="Import a raw binary signature from a .bin file" onClick={() => { setInspectImportError(null); inspectSigBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
                           <Upload size={10} /> Import .bin
                         </TinyBtn>
-                        <TinyBtn onClick={() => signature && downloadBinary(`mldsa-sig-inspect.bin`, hexToUint8Array(signature))} disabled={!signature} className="opacity-60 hover:opacity-100">
+                        <TinyBtn title="Save the current signature as a raw binary .bin file" onClick={() => signature && downloadBinary(`mldsa-sig-inspect.bin`, hexToUint8Array(signature))} disabled={!signature} className="opacity-60 hover:opacity-100">
                           <Download size={10} /> Export .bin
                         </TinyBtn>
                       </ActionRow>
@@ -683,55 +718,72 @@ if __name__ == "__main__":
 
                   {/* Message */}
                   <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
-                      <FileText size={14} /> Payload / Message
-                      {message && (
-                        <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
-                          {new TextEncoder().encode(message).length} bytes
-                        </span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      title="Enter the exact message string that was signed"
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
+                        <FileText size={14} /> Payload / Message
+                        {isMessageBinary && (
+                          <span className="ml-2 font-mono text-[9px] bg-violet-600 text-white px-1.5 py-0.5 rounded-sm">HEX</span>
+                        )}
+                        {message && (
+                          <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
+                            {isMessageBinary
+                              ? Math.ceil(message.replace(/[^a-fA-F0-9]/g, '').length / 2)
+                              : new TextEncoder().encode(message).length} bytes
+                          </span>
+                        )}
+                      </label>
+                      <ActionRow>
+                        <TinyBtn onClick={() => { setIsMessageBinary(false); setMessage(''); setResult(null); }} className="opacity-60 hover:opacity-100">
+                          Clear / Reset Text
+                        </TinyBtn>
+                        <TinyBtn onClick={() => { setInspectImportError(null); inspectMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                          <Upload size={10} /> Import .bin
+                        </TinyBtn>
+                      </ActionRow>
+                    </div>
+                    <textarea
+                      title={isMessageBinary ? "Hex encoded binary message" : "Enter the exact message string that was signed"}
                       value={message}
-                      onChange={(e) => { setMessage(e.target.value); setResult(null); }}
-                      placeholder="Enter the message that was signed..."
-                      className="w-full p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414]"
+                      onChange={(e) => {
+                        setMessage(e.target.value);
+                        setResult(null);
+                      }}
+                      placeholder={isMessageBinary ? "Paste hex-encoded binary message..." : "Enter the message that was signed..."}
+                      className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                     />
                   </div>
-
-                  {/* Advanced Verify Options toggle */}
-                  <div className="space-y-3">
-                    <button
-                      onClick={() => setShowAdvancedVerify(v => !v)}
-                      className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-50 hover:opacity-80 transition-opacity"
-                    >
-                      <ChevronDown size={14} className={cn('transition-transform', showAdvancedVerify && 'rotate-180')} />
-                      Verification Options
-                    </button>
-                    {showAdvancedVerify && (
-                      <AdvancedOptions
-                        label="Mode & Context used during signing"
-                        mode={inspectMode} onModeChange={setInspectMode}
-                        context={inspectContext} onContextChange={setInspectContext}
-                        hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
-                        // @ts-ignore - passing optional props for the legacy switch
-                        inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
-                      />
-                    )}
-                  </div>
-
-                  <button
-                    title="Run cryptographic ML-DSA algorithms to verify the signature"
-                    onClick={handleInspect}
-                    disabled={isInspecting || !publicKey || !signature || !message}
-                    className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
-                  >
-                    {isInspecting ? <RefreshCw className="animate-spin" /> : <ChevronRight />}
-                    {isInspecting ? 'Analyzing...' : 'Inspect & Verify'}
-                  </button>
                 </div>
+
+                {/* Advanced Verify Options toggle */}
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setShowAdvancedVerify(v => !v)}
+                    className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-50 hover:opacity-80 transition-opacity"
+                  >
+                    <ChevronDown size={14} className={cn('transition-transform', showAdvancedVerify && 'rotate-180')} />
+                    Verification Options
+                  </button>
+                  {showAdvancedVerify && (
+                    <AdvancedOptions
+                      label="Mode & Context used during signing"
+                      mode={inspectMode} onModeChange={setInspectMode}
+                      context={inspectContext} onContextChange={setInspectContext}
+                      hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
+                      // @ts-ignore - passing optional props for the legacy switch
+                      inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
+                    />
+                  )}
+                </div>
+
+                <button
+                  title="Run cryptographic ML-DSA algorithms to verify the signature"
+                  onClick={handleInspect}
+                  disabled={isInspecting || !publicKey || !signature || !message}
+                  className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
+                >
+                  {isInspecting ? <RefreshCw className="animate-spin" /> : <ChevronRight />}
+                  {isInspecting ? 'Analyzing...' : 'Inspect & Verify'}
+                </button>
 
                 {/* ── Results ──────────────────────────────────────────────────── */}
                 {result && (
@@ -904,47 +956,45 @@ if __name__ == "__main__":
                               The lattice reconstruction (A·z − c·t₁·2^d → UseHint → w'₁) is performed by the noble library. Steps 1–4 above are independently derived from inputs.
                             </p>
                           </div>
+                        </div>
+                      </div>
+                    )}
 
-                          {/* Legacy Mode Extra Box */}
-                          {result.legacyValid !== undefined && (
-                            <div className={cn(
-                              'p-4 border space-y-3 mt-4',
-                              result.legacyValid ? 'border-orange-300 bg-orange-50' : 'border-[#141414]/10 bg-white',
-                            )}>
-                              <div className="flex items-center gap-2 border-b border-[#141414]/10 pb-2 mb-2">
-                                <Layers size={14} className={result.legacyValid ? 'text-orange-700' : 'opacity-40'} />
-                                <span className={cn('text-[10px] uppercase font-bold tracking-wider', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
-                                  Legacy CRYSTALS-Dilithium Check
-                                </span>
-                              </div>
+                    {/* Legacy Mode Extra Box */}
+                    {result.legacyValid !== undefined && (
+                      <div className={cn(
+                        'p-4 border space-y-3 mt-4',
+                        result.legacyValid ? 'border-orange-300 bg-orange-50' : 'border-[#141414]/10 bg-white',
+                      )}>
+                        <div className="flex items-center gap-2 border-b border-[#141414]/10 pb-2 mb-2">
+                          <Layers size={14} className={result.legacyValid ? 'text-orange-700' : 'opacity-40'} />
+                          <span className={cn('text-[10px] uppercase font-bold tracking-wider', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
+                            Legacy CRYSTALS-Dilithium Check
+                          </span>
+                        </div>
 
-                              <HexPreview
-                                label="Legacy μ = SHAKE256(tr ∥ msg)"
-                                hex={result.legacyMuHex || ''}
-                                bytes={64}
-                              />
+                        <HexPreview
+                          label="Legacy μ = SHAKE256(tr ∥ msg)"
+                          hex={result.legacyMuHex || ''}
+                          bytes={64}
+                        />
 
-                              <div className="flex items-center gap-3 pt-2">
-                                {result.legacyValid
-                                  ? <CheckCircle2 size={16} className="text-orange-600 shrink-0" />
-                                  : <XCircle size={16} className="text-[#141414]/30 shrink-0" />
-                                }
-                                <p className={cn('text-xs font-mono', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
-                                  {result.legacyValid
-                                    ? 'Legacy Verification Successful. This signature was matched using the old Dilithium 2/3/5 standard formulation (no M\' context).'
-                                    : 'Legacy Verification Failed. This is expected if the signature was generated under the final FIPS 204 standard.'}
-                                </p>
-                              </div>
-                            </div>
-                          )}
+                        <div className="flex items-center gap-3 pt-2">
+                          {result.legacyValid
+                            ? <CheckCircle2 size={16} className="text-orange-600 shrink-0" />
+                            : <XCircle size={16} className="text-[#141414]/30 shrink-0" />
+                          }
+                          <p className={cn('text-xs font-mono', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
+                            {result.legacyValid
+                              ? 'Legacy Verification Successful. This signature was matched using the old Dilithium 2/3/5 standard formulation (no M\' context).'
+                              : 'Legacy Verification Failed. This is expected if the signature was generated under the final FIPS 204 standard.'}
+                          </p>
                         </div>
                       </div>
                     )}
                   </motion.div>
                 )}
               </motion.div>
-
-              /* ── Key & Sign Tools Tab ────────────────────────────────────────── */
             ) : activeTab === 'generate' ? (
               <motion.div
                 key="generate"
@@ -956,6 +1006,7 @@ if __name__ == "__main__":
                 <input ref={importPubBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportPublicKeyBin} className="hidden" />
                 <input ref={importPrivBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportPrivateKeyBin} className="hidden" />
                 <input ref={importSigBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportSignatureBin} className="hidden" />
+                <input ref={importGenMessageBinRef} type="file" accept=".bin,application/octet-stream" onChange={handleImportGenMessageBin} className="hidden" />
 
                 {/* Key Generation */}
                 <section className="space-y-4">
@@ -1002,9 +1053,9 @@ if __name__ == "__main__":
                             </span>
                           </span>
                           <ActionRow>
-                            <TinyBtn onClick={() => { setImportError(null); importPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
-                            <TinyBtn onClick={handleExportPublicKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
-                            <TinyBtn onClick={() => copyToClipboard(genKeys.publicKey)}><Copy size={10} /> Copy</TinyBtn>
+                            <TinyBtn title="Import a raw binary public key" onClick={() => { setImportError(null); importPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
+                            <TinyBtn title="Export this public key as a .bin file" onClick={handleExportPublicKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
+                            <TinyBtn title="Copy hex to clipboard" onClick={() => copyToClipboard(genKeys.publicKey)}><Copy size={10} /> Copy</TinyBtn>
                           </ActionRow>
                         </div>
                         <div className="p-3 bg-white border border-[#141414] font-mono text-[10px] break-all max-h-24 overflow-y-auto">{genKeys.publicKey}</div>
@@ -1019,9 +1070,9 @@ if __name__ == "__main__":
                             </span>
                           </span>
                           <ActionRow>
-                            <TinyBtn onClick={() => { setImportError(null); importPrivBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
-                            <TinyBtn onClick={handleExportPrivateKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
-                            <TinyBtn onClick={() => copyToClipboard(genKeys.privateKey)}><Copy size={10} /> Copy</TinyBtn>
+                            <TinyBtn title="Import a raw binary private key" onClick={() => { setImportError(null); importPrivBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
+                            <TinyBtn title="Export this private key as a secure .bin file" onClick={handleExportPrivateKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
+                            <TinyBtn title="Copy hex to clipboard" onClick={() => copyToClipboard(genKeys.privateKey)}><Copy size={10} /> Copy</TinyBtn>
                           </ActionRow>
                         </div>
                         <div className="p-3 bg-white border border-[#141414] font-mono text-[10px] break-all max-h-24 overflow-y-auto">{genKeys.privateKey}</div>
@@ -1039,113 +1090,126 @@ if __name__ == "__main__":
 
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
-                        Message to Sign
-                        {genMessage && (
-                          <span className="font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm opacity-100">
-                            {new TextEncoder().encode(genMessage).length} bytes
-                          </span>
-                        )}
-                      </label>
-                      <input
-                        type="text"
-                        title="Type the payload to be mathematically signed"
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <label className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                          Message to Sign
+                          {isGenMessageBinary && (
+                            <span className="ml-2 font-mono text-[9px] bg-violet-600 text-white px-1.5 py-0.5 rounded-sm">HEX</span>
+                          )}
+                          {genMessage && (
+                            <span className="font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm opacity-100">
+                              {isGenMessageBinary
+                                ? Math.ceil(genMessage.replace(/[^a-fA-F0-9]/g, '').length / 2)
+                                : new TextEncoder().encode(genMessage).length} bytes
+                            </span>
+                          )}
+                        </label>
+                        <ActionRow>
+                          <TinyBtn onClick={() => { setIsGenMessageBinary(false); setGenMessage(''); setGenSignature(''); }} className="opacity-60 hover:opacity-100">
+                            Clear / Reset Text
+                          </TinyBtn>
+                          <TinyBtn onClick={() => { setImportError(null); importGenMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                            <Upload size={10} /> Import .bin
+                          </TinyBtn>
+                        </ActionRow>
+                      </div>
+                      <textarea
+                        title={isGenMessageBinary ? "Hex encoded binary message to sign" : "Type the payload to be mathematically signed"}
                         value={genMessage}
                         onChange={(e) => { setGenMessage(e.target.value); setGenSignature(''); }}
-                        className="w-full p-3 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none"
+                        placeholder={isGenMessageBinary ? "Paste hex-encoded binary message..." : "Enter message to sign..."}
+                        className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                       />
                     </div>
+                  </div>
 
-                    {/* Advanced signing options */}
-                    <div className="space-y-3">
-                      <button
-                        onClick={() => setShowAdvancedSign(v => !v)}
-                        className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-50 hover:opacity-80 transition-opacity"
-                      >
-                        <ChevronDown size={14} className={cn('transition-transform', showAdvancedSign && 'rotate-180')} />
-                        Advanced Options
-                        {(signMode === 'hash-ml-dsa' || signContext) && (
-                          <span className="ml-1 px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] rounded-sm font-mono">active</span>
-                        )}
-                      </button>
-                      {showAdvancedSign && (
-                        <AdvancedOptions
-                          label="Signing Mode & Context"
-                          mode={signMode} onModeChange={(m) => { setSignMode(m); setGenSignature(''); }}
-                          context={signContext} onContextChange={(c) => { setSignContext(c); setGenSignature(''); }}
-                          hashAlg={signHashAlg} onHashAlgChange={(h) => { setSignHashAlg(h); setGenSignature(''); }}
-                        />
-                      )}
-                    </div>
-
+                  {/* Advanced signing options */}
+                  <div className="space-y-3">
                     <button
-                      title="Compute the lattice signature for this payload"
-                      onClick={handleSign}
-                      disabled={!genKeys}
-                      className="w-full py-3 border border-[#141414] bg-[#141414] text-[#E4E3E0] font-serif italic disabled:opacity-30 flex items-center justify-center gap-2"
+                      onClick={() => setShowAdvancedSign(v => !v)}
+                      className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-50 hover:opacity-80 transition-opacity"
                     >
-                      <Layers size={16} />
-                      {signMode === 'hash-ml-dsa' ? `Sign with Hash ML-DSA (${signHashAlg})` : 'Sign Payload'}
+                      <ChevronDown size={14} className={cn('transition-transform', showAdvancedSign && 'rotate-180')} />
+                      Advanced Options
+                      {(signMode === 'hash-ml-dsa' || signContext) && (
+                        <span className="ml-1 px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] rounded-sm font-mono">active</span>
+                      )}
                     </button>
-
-                    {genSignature && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center flex-wrap gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
-                              Generated Signature
-                              <span className="font-mono text-[9px] bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5 rounded-sm opacity-100">
-                                {hexToUint8Array(genSignature).length} bytes
-                              </span>
-                            </span>
-                            <ModeBadge mode={signMode} />
-                          </div>
-                          <ActionRow>
-                            <TinyBtn onClick={sendToInspector} className="text-blue-600">
-                              <Search size={10} /> Send to Inspector
-                            </TinyBtn>
-                            <TinyBtn onClick={() => { setImportError(null); importSigBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
-                              <Upload size={10} /> Import .bin
-                            </TinyBtn>
-                            <TinyBtn onClick={handleExportSignatureBin} className="text-emerald-700">
-                              <Download size={10} /> Export .bin
-                            </TinyBtn>
-                            <TinyBtn onClick={handleExportSignature} className="text-emerald-700">
-                              <Download size={10} /> Export .json
-                            </TinyBtn>
-                            <TinyBtn onClick={() => copyToClipboard(genSignature)}>
-                              <Copy size={10} /> Copy
-                            </TinyBtn>
-                          </ActionRow>
-                        </div>
-                        {signContext && (
-                          <p className="text-[9px] font-mono opacity-50">
-                            Context: &quot;{signContext}&quot; ({new TextEncoder().encode(signContext).length} bytes)
-                          </p>
-                        )}
-                        <div className="p-3 bg-white border border-[#141414] font-mono text-[10px] break-all max-h-32 overflow-y-auto">
-                          {genSignature}
-                        </div>
-                      </div>
-                    )}
-
-                    {!genSignature && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => { setImportError(null); importSigBinRef.current?.click(); }}
-                          disabled={!genKeys}
-                          className="text-[10px] flex items-center gap-2 px-3 py-1.5 border border-[#141414]/30 hover:border-[#141414] hover:bg-[#141414]/5 transition-colors disabled:opacity-30 font-mono"
-                        >
-                          <Upload size={10} /> Import Signature .bin
-                        </button>
-                        <span className="text-[9px] opacity-40 font-mono">Load a previously exported raw signature</span>
-                      </div>
+                    {showAdvancedSign && (
+                      <AdvancedOptions
+                        label="Signing Mode & Context"
+                        mode={signMode} onModeChange={(m) => { setSignMode(m); setGenSignature(''); }}
+                        context={signContext} onContextChange={(c) => { setSignContext(c); setGenSignature(''); }}
+                        hashAlg={signHashAlg} onHashAlgChange={(h) => { setSignHashAlg(h); setGenSignature(''); }}
+                      />
                     )}
                   </div>
+
+                  <button
+                    title="Compute the lattice signature for this payload"
+                    onClick={handleSign}
+                    disabled={!genKeys}
+                    className="w-full py-3 border border-[#141414] bg-[#141414] text-[#E4E3E0] font-serif italic disabled:opacity-30 flex items-center justify-center gap-2"
+                  >
+                    <Layers size={16} />
+                    {signMode === 'hash-ml-dsa' ? `Sign with Hash ML-DSA (${signHashAlg})` : 'Sign Payload'}
+                  </button>
+
+                  {genSignature && (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                            Generated Signature
+                            <span className="font-mono text-[9px] bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5 rounded-sm opacity-100">
+                              {hexToUint8Array(genSignature).length} bytes
+                            </span>
+                          </span>
+                          <ModeBadge mode={signMode} />
+                        </div>
+                        <ActionRow>
+                          <TinyBtn onClick={sendToInspector} className="text-blue-600">
+                            <Search size={10} /> Send to Inspector
+                          </TinyBtn>
+                          <TinyBtn onClick={() => { setImportError(null); importSigBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                            <Upload size={10} /> Import .bin
+                          </TinyBtn>
+                          <TinyBtn onClick={handleExportSignatureBin} className="text-emerald-700">
+                            <Download size={10} /> Export .bin
+                          </TinyBtn>
+                          <TinyBtn onClick={handleExportSignature} className="text-emerald-700">
+                            <Download size={10} /> Export .json
+                          </TinyBtn>
+                          <TinyBtn onClick={() => copyToClipboard(genSignature)}>
+                            <Copy size={10} /> Copy
+                          </TinyBtn>
+                        </ActionRow>
+                      </div>
+                      {signContext && (
+                        <p className="text-[9px] font-mono opacity-50">
+                          Context: &quot;{signContext}&quot; ({new TextEncoder().encode(signContext).length} bytes)
+                        </p>
+                      )}
+                      <div className="p-3 bg-white border border-[#141414] font-mono text-[10px] break-all max-h-32 overflow-y-auto">
+                        {genSignature}
+                      </div>
+                    </div>
+                  )}
+
+                  {!genSignature && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { setImportError(null); importSigBinRef.current?.click(); }}
+                        disabled={!genKeys}
+                        className="text-[10px] flex items-center gap-2 px-3 py-1.5 border border-[#141414]/30 hover:border-[#141414] hover:bg-[#141414]/5 transition-colors disabled:opacity-30 font-mono"
+                      >
+                        <Upload size={10} /> Import Signature .bin
+                      </button>
+                      <span className="text-[9px] opacity-40 font-mono">Load a previously exported raw signature</span>
+                    </div>
+                  )}
                 </section>
               </motion.div>
-
-              /* ── X.509 Certificates Tab ─────────────────────────────────────── */
             ) : activeTab === 'x509' ? (
               <motion.div
                 key="x509"
@@ -1292,8 +1356,6 @@ if __name__ == "__main__":
                   </motion.div>
                 )}
               </motion.div>
-
-              /* ── Python Reference Tab ─────────────────────────────────────────── */
             ) : (
               <motion.div
                 key="python"
@@ -1351,7 +1413,7 @@ if __name__ == "__main__":
           </div>
           <p className="text-[10px] opacity-40 font-mono">&copy; 2026 SAHEB BISWAS. ALL RIGHTS RESERVED.</p>
         </div>
-      </footer>
-    </div>
+      </footer >
+    </div >
   );
 }
