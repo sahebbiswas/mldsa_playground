@@ -8,6 +8,8 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Pure ML-DSA & HashML-DSA:** Supports standard signing, as well as HashML-DSA with pre-hashing (SHA-256, SHA-384, SHA-512).
 - **Context Strings:** Full support for FIPS 204 context strings (up to 255 bytes).
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
+- **X.509 Certificates:** Parses and verifies ML-DSA signatures embedded in X.509 Certificates (DER, PEM). Supports extracting Subject, Issuer, Validity periods, and OID signature variance mapping.
+- **Experimental Legacy Checks:** Includes a testing mode to check if signatures were generated with older CRYSTALS-Dilithium standards rather than final FIPS 204 formulas.
 - **Export & Import:** Swap keys and signatures using JSON bundles or raw binary (`.bin`) files.
 - **Python Reference:** View equivalent backend integration code using `liboqs-python`.
 
@@ -25,6 +27,23 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
    npm run dev
    ```
 4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## Deployment (Web Service)
+
+Because all cryptographic math runs locally in the browser via WebAssembly/JS, this is a purely static Single Page Application (SPA) and requires no backend server.
+
+The easiest way to make this available online is using modern static hosting like **Vercel**, **Netlify**, or **Cloudflare Pages**.
+
+### Deploying to Vercel/Netlify
+1. Push this repository to a service like GitHub, GitLab, or Bitbucket.
+2. Sign up for [Vercel](https://vercel.com) or [Netlify](https://netlify.com) and import your repository.
+3. The platform will automatically detect Vite and configure the build settings:
+   - **Framework:** Vite
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+4. Click **Deploy**. You will be given a public URL with HTTPS automatically.
+
+*(Note: A `vercel.json` routing configuration is included in this repository to automatically handle SPA routing).*
 
 ## Usage Guide
 
@@ -46,8 +65,16 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 1. Navigate to the **Inspect Signature** tab (or click "Send to Inspector" from the signing page).
 2. Input the hex-encoded Public Key, Signature, and Message. Alternatively, use the **Import .bin** buttons.
 3. If the signature was created using a context string or HashML-DSA, expand **Verification Options** and match those settings.
-4. Click **Inspect & Verify**.
-5. If valid, the app will display a **SHAKE256 Cryptographic Reconstruction** panel, breaking down the exact steps FIPS 204 uses to construct the message representative ($\mu$) and the challenge hash ($`\tilde{c}`$).
+4. *(Advanced)* If you suspect you have an older non-FIPS signature, check the **Experimental Legacy CRYSTALS-Dilithium verification** box.
+5. Click **Inspect & Verify**.
+6. If valid, the app will display a **SHAKE256 Cryptographic Reconstruction** panel, breaking down the exact steps FIPS 204 uses to construct the message representative ($\mu$) and the challenge hash ($`\tilde{c}`$).
+
+### 4. X.509 Certificates
+1. Navigate to the **X.509 Certificates** tab.
+2. Upload a certificate (.pem, .cer, .der, .crt).
+3. The platform will decode the ASN.1 structure and display the issuer, subject, algorithm OID, and validity periods.
+4. If the certificate is self-signed, it will automatically undergo cryptographic signature verification against its own embedded public ML-DSA key.
+5. If the certificate is issued by a different entity, a secondary input will appear allowing you to import the Issuer's raw Public Key (`.bin` or hex) to test the signature.
 
 ## Underlying Cryptography
 

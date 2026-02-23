@@ -25,6 +25,14 @@ import {
   Hash,
   Lock,
   Layers,
+  Fingerprint, // Added for X.509
+  Dna, // Added for X.509
+  FileJson, // Added for X.509
+  ArrowRight, // Added for X.509
+  FileCheck2, // Added for X.509
+  Calendar, // Added for X.509
+  Link, // Added for X.509
+  User, // Added for X.509
 } from 'lucide-react';
 import {
   inspectSignature,
@@ -38,6 +46,7 @@ import {
   SigningOptions,
   InspectionResult,
 } from './services/mldsa';
+import { parseCertificate, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -137,7 +146,7 @@ export default function App() {
   const inspectSigBinRef = useRef<HTMLInputElement>(null);
 
   // ── Generate / Sign tab state ────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python'>('inspect');
+  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
   const [genSignature, setGenSignature] = useState('');
@@ -152,6 +161,13 @@ export default function App() {
   const importPubBinRef = useRef<HTMLInputElement>(null);
   const importPrivBinRef = useRef<HTMLInputElement>(null);
   const importSigBinRef = useRef<HTMLInputElement>(null);
+
+  // ── X.509 tab state ───────────────────────────────────────────────────────
+  const [x509Result, setX509Result] = useState<X509ParseResult | null>(null);
+  const [x509VerifyValid, setX509VerifyValid] = useState<boolean | null>(null);
+  const [x509IssuerPubHex, setX509IssuerPubHex] = useState('');
+  const x509UploadRef = useRef<HTMLInputElement>(null);
+  const x509IssuerUploadRef = useRef<HTMLInputElement>(null);
 
   // ── Inspect handlers ──────────────────────────────────────────────────────
 
@@ -264,11 +280,77 @@ export default function App() {
     if (!file) return;
     try {
       const bytes = await readBinFile(file);
-      setGenKeys(prev => prev ? { ...prev, privateKey: uint8ArrayToHex(bytes) } : { publicKey: '', privateKey: uint8ArrayToHex(bytes) });
+      const privHex = uint8ArrayToHex(bytes);
+      setGenKeys(prev => prev ? { ...prev, privateKey: privHex } : { publicKey: '', privateKey: privHex });
       setGenSignature('');
     } catch { setImportError('Failed to read binary private key file.'); }
     e.target.value = '';
   };
+
+  // ── X.509 Handlers ────────────────────────────────────────────────────────
+
+  const handleX509Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Read file. If it ends in .pem or .crt it might be text, .der or .cer might be binary.
+    // readBinFile handles both well enough since text is just bytes, and we decode it in the service if it's PEM.
+    try {
+      const bytes = await readBinFile(file);
+      // Attempt to parse as text to see if it's PEM
+      let textAttempt = '';
+      try { textAttempt = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (e) { }
+
+      const parsed = parseCertificate(textAttempt.includes('-----BEGIN CERTIFICATE-----') ? textAttempt : bytes);
+      setX509Result(parsed);
+      setX509VerifyValid(null);
+      setX509IssuerPubHex('');
+
+      if (parsed.valid && parsed.details?.isSelfSigned && parsed.details.signatureVariant) {
+        // Auto-verify self-signed
+        const isValid = verifyX509Signature(
+          parsed.details.tbsBytes,
+          parsed.details.signatureValueBytes,
+          parsed.details.publicKeyBytes,
+          parsed.details.signatureVariant
+        );
+        setX509VerifyValid(isValid);
+      }
+    } catch (err: any) {
+      setX509Result({ valid: false, error: 'Failed to read file: ' + err.message });
+      setX509VerifyValid(null);
+    }
+    e.target.value = '';
+  };
+
+  const handleVerifyX509 = () => {
+    if (!x509Result?.details?.signatureVariant || !x509IssuerPubHex) return;
+    try {
+      const issuerBytes = hexToUint8Array(x509IssuerPubHex);
+      const isValid = verifyX509Signature(
+        x509Result.details.tbsBytes,
+        x509Result.details.signatureValueBytes,
+        issuerBytes,
+        x509Result.details.signatureVariant
+      );
+      setX509VerifyValid(isValid);
+    } catch (e) {
+      setX509VerifyValid(false);
+    }
+  };
+
+  const handleImportX509IssuerBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const bytes = await readBinFile(file);
+      setX509IssuerPubHex(uint8ArrayToHex(bytes));
+      setX509VerifyValid(null); // Reset verification state
+    } catch (e) { }
+    e.target.value = '';
+  };
+
+  // ────────────────────────────────────────────────────────────────────────────
 
   const handleImportSignatureBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setImportError(null);
@@ -1005,6 +1087,153 @@ if __name__ == "__main__":
                     )}
                   </div>
                 </section>
+              </motion.div>
+
+              /* ── X.509 Certificates Tab ─────────────────────────────────────── */
+            ) : activeTab === 'x509' ? (
+              <motion.div
+                key="x509"
+                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                className="space-y-8"
+              >
+                <div>
+                  <h2 className="font-serif italic text-2xl">X.509 Certificate Verification</h2>
+                  <p className="text-xs opacity-60">Parse and verify ML-DSA signatures embedded in X.509 Certificates (.pem, .cer, .der, .crt).</p>
+                </div>
+
+                <div className="space-y-4">
+                  <input type="file" ref={x509UploadRef} onChange={handleX509Upload} className="hidden" accept=".pem,.cer,.der,.crt" />
+                  <button
+                    onClick={() => { setX509Result(null); setX509VerifyValid(null); setX509IssuerPubHex(''); x509UploadRef.current?.click(); }}
+                    className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-[#141414]/20 hover:border-[#141414]/50 hover:bg-[#141414]/5 transition-colors gap-3 cursor-pointer"
+                  >
+                    <div className="p-3 bg-white rounded-full shadow-sm">
+                      <FileCheck2 size={24} className="text-[#141414]" />
+                    </div>
+                    <div className="text-center">
+                      <span className="font-bold block">Upload X.509 Certificate</span>
+                      <span className="text-xs opacity-50 font-mono">Supports DER and PEM formats</span>
+                    </div>
+                  </button>
+                  {x509Result?.error && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 p-3 border border-red-400 bg-red-50 text-red-700 text-xs font-mono">
+                      <AlertTriangle size={14} className="shrink-0" /> {x509Result.error}
+                    </motion.div>
+                  )}
+                </div>
+
+                {x509Result?.details && (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                    {/* Certificate Details */}
+                    <div className="p-6 bg-white border border-[#141414]/10 space-y-6">
+                      <div className="flex items-center gap-2 border-b border-[#141414]/10 pb-4">
+                        <User size={16} className="opacity-60" />
+                        <h3 className="font-serif italic text-lg">Certificate Details</h3>
+                        {x509Result.details.isSelfSigned && (
+                          <span className="ml-auto px-2 py-0.5 bg-violet-100 text-violet-700 text-[10px] uppercase font-bold tracking-wider">Self-Signed</span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40">Subject</span>
+                            <p className="text-sm font-medium">{x509Result.details.subject}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40">Issuer</span>
+                            <p className="text-sm font-medium">{x509Result.details.issuer}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40">Serial Number</span>
+                            <p className="text-xs font-mono break-all bg-[#141414]/5 p-2">{x509Result.details.serialNumber}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40 flex items-center gap-1"><Calendar size={12} /> Validity Period</span>
+                            <p className="text-xs font-mono">Not Before: {x509Result.details.notBefore.toISOString()}</p>
+                            <p className="text-xs font-mono">Not After: {x509Result.details.notAfter.toISOString()}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40 flex items-center gap-1"><Link size={12} /> Signature Algorithm</span>
+                            <p className="text-sm font-medium">
+                              {x509Result.details.signatureVariant || <span className="text-red-600">Unknown/Unsupported</span>}
+                            </p>
+                            <p className="text-[10px] font-mono opacity-50">OID: {x509Result.details.signatureAlgorithmObj}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider opacity-40">Public Key Size</span>
+                            <p className="text-xs font-mono">{x509Result.details.publicKeyBytes.length} bytes</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Verification Panel */}
+                    <div className={cn(
+                      'p-6 border space-y-4 transition-colors',
+                      x509VerifyValid === true ? 'border-[#141414] bg-white' :
+                        x509VerifyValid === false ? 'border-red-400 bg-red-50' : 'border-[#141414]/10 bg-[#141414]/3',
+                    )}>
+                      <div className="flex items-center gap-3 border-b border-[#141414]/10 pb-4">
+                        <Shield className={cn('w-5 h-5', x509VerifyValid === true ? 'text-green-600' : x509VerifyValid === false ? 'text-red-500' : 'opacity-40')} />
+                        <h3 className="font-serif italic text-lg">Cryptographic Verification</h3>
+                      </div>
+
+                      {/* Verification Results */}
+                      {x509VerifyValid !== null ? (
+                        <div className="flex gap-4 items-center">
+                          {x509VerifyValid ? <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0" /> : <XCircle className="w-8 h-8 text-red-600 shrink-0" />}
+                          <div>
+                            <p className={cn('font-bold', x509VerifyValid ? 'text-green-700' : 'text-red-700')}>
+                              {x509VerifyValid ? 'Signature Valid' : 'Signature Invalid'}
+                            </p>
+                            <p className="text-xs font-mono opacity-70">
+                              {x509VerifyValid
+                                ? 'The certificate signature mathematically guarantees the TBS (To-Be-Signed) bytes were signed by the provided public key.'
+                                : 'The cryptographic verification failed. The signature does not match the public key & TBS contents.'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <p className="text-xs opacity-70">
+                            {x509Result.details.isSelfSigned
+                              ? 'This certificate is self-signed. Verification should occur automatically.'
+                              : 'This certificate is issued by a 3rd party. Please load the issuer\'s ML-DSA public key to verify it.'}
+                          </p>
+                          {!x509Result.details.isSelfSigned && (
+                            <div className="flex gap-2">
+                              {/* Secondary upload for Issuer Key */}
+                              <input type="file" ref={x509IssuerUploadRef} onChange={handleImportX509IssuerBin} className="hidden" accept=".bin" />
+                              <input
+                                type="text"
+                                placeholder="Paste Issuer Public Key Hex..."
+                                value={x509IssuerPubHex}
+                                onChange={(e) => setX509IssuerPubHex(e.target.value)}
+                                className="flex-1 p-3 bg-white border border-[#141414]/20 font-mono text-xs focus:border-[#141414] focus:outline-none"
+                              />
+                              <button onClick={() => x509IssuerUploadRef.current?.click()} className="px-4 py-3 bg-[#E4E3E0] border border-[#141414]/20 hover:bg-[#141414]/10 transition-colors">
+                                <Upload size={14} />
+                              </button>
+                            </div>
+                          )}
+                          {!x509Result.details.isSelfSigned && x509Result.details.signatureVariant && (
+                            <button
+                              onClick={handleVerifyX509}
+                              disabled={!x509IssuerPubHex}
+                              className="w-full py-3 bg-[#141414] text-[#E4E3E0] font-serif italic flex justify-center disabled:opacity-30 hover:opacity-90 transition-opacity"
+                            >
+                              Verify Signature against Issuer Key
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
 
               /* ── Python Reference Tab ─────────────────────────────────────────── */
