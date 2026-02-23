@@ -529,9 +529,16 @@ if __name__ == "__main__":
           <div className="bg-[#141414] p-2 rounded-sm">
             <Shield className="text-[#E4E3E0] w-6 h-6" />
           </div>
-          <div>
-            <h1 className="font-serif italic text-2xl leading-none">ML-DSA Inspector</h1>
-            <p className="text-[10px] uppercase tracking-widest opacity-50 mt-1 font-mono">FIPS 204 Post-Quantum Utility</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="font-serif italic text-2xl leading-none">ML-DSA Inspector</h1>
+              <p className="text-[10px] uppercase tracking-widest opacity-50 mt-1 font-mono">FIPS 204 Post-Quantum Utility</p>
+            </div>
+            {typeof __APP_VERSION__ !== 'undefined' && (
+              <span className="px-2 py-1 bg-[#141414]/10 rounded-sm text-[10px] font-mono font-bold">
+                v{__APP_VERSION__}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -556,6 +563,7 @@ if __name__ == "__main__":
         <div className="lg:col-span-3 space-y-2">
           {([
             ['inspect', <Search size={18} />, 'Inspect Signature'],
+            ['x509', <FileCheck2 size={18} />, 'X.509 Certificates'],
             ['generate', <Key size={18} />, 'Key & Sign Tools'],
             ['python', <Terminal size={18} />, 'Python Reference'],
           ] as const).map(([tab, icon, label]) => (
