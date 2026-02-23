@@ -624,6 +624,11 @@ if __name__ == "__main__":
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
                         <Key size={14} /> Public Key (Hex)
+                        {publicKey && (
+                          <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
+                            {Math.ceil(publicKey.replace(/[^a-fA-F0-9]/g, '').length / 2)} bytes
+                          </span>
+                        )}
                       </label>
                       <ActionRow>
                         <TinyBtn onClick={() => { setInspectImportError(null); inspectPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
@@ -647,6 +652,11 @@ if __name__ == "__main__":
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
                         <Terminal size={14} /> Signature (Hex)
+                        {signature && (
+                          <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
+                            {Math.ceil(signature.replace(/[^a-fA-F0-9]/g, '').length / 2)} bytes
+                          </span>
+                        )}
                       </label>
                       <ActionRow>
                         <TinyBtn onClick={() => { setInspectImportError(null); inspectSigBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
@@ -669,6 +679,11 @@ if __name__ == "__main__":
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
                       <FileText size={14} /> Payload / Message
+                      {message && (
+                        <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
+                          {new TextEncoder().encode(message).length} bytes
+                        </span>
+                      )}
                     </label>
                     <input
                       type="text"
@@ -971,7 +986,12 @@ if __name__ == "__main__":
                       {/* Public Key */}
                       <div className="space-y-2">
                         <div className="flex justify-between items-center flex-wrap gap-2">
-                          <span className="text-[10px] uppercase font-bold opacity-40">Public Key</span>
+                          <span className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                            Public Key
+                            <span className="font-mono text-[9px] bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5 rounded-sm opacity-100">
+                              {hexToUint8Array(genKeys.publicKey).length} bytes
+                            </span>
+                          </span>
                           <ActionRow>
                             <TinyBtn onClick={() => { setImportError(null); importPubBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
                             <TinyBtn onClick={handleExportPublicKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
@@ -983,7 +1003,12 @@ if __name__ == "__main__":
                       {/* Private Key */}
                       <div className="space-y-2">
                         <div className="flex justify-between items-center flex-wrap gap-2">
-                          <span className="text-[10px] uppercase font-bold opacity-40">Private Key (Secret)</span>
+                          <span className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                            Private Key (Secret)
+                            <span className="font-mono text-[9px] bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5 rounded-sm opacity-100">
+                              {hexToUint8Array(genKeys.privateKey).length} bytes
+                            </span>
+                          </span>
                           <ActionRow>
                             <TinyBtn onClick={() => { setImportError(null); importPrivBinRef.current?.click(); }} className="opacity-60 hover:opacity-100"><Upload size={10} /> Import .bin</TinyBtn>
                             <TinyBtn onClick={handleExportPrivateKeyBin} className="opacity-60 hover:opacity-100"><Download size={10} /> Export .bin</TinyBtn>
@@ -1005,7 +1030,14 @@ if __name__ == "__main__":
 
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] uppercase font-bold opacity-40">Message to Sign</label>
+                      <label className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                        Message to Sign
+                        {genMessage && (
+                          <span className="font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm opacity-100">
+                            {new TextEncoder().encode(genMessage).length} bytes
+                          </span>
+                        )}
+                      </label>
                       <input
                         type="text"
                         value={genMessage}
@@ -1049,7 +1081,12 @@ if __name__ == "__main__":
                       <div className="space-y-2">
                         <div className="flex justify-between items-center flex-wrap gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] uppercase font-bold opacity-40">Generated Signature</span>
+                            <span className="flex items-center gap-2 text-[10px] uppercase font-bold opacity-40">
+                              Generated Signature
+                              <span className="font-mono text-[9px] bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5 rounded-sm opacity-100">
+                                {hexToUint8Array(genSignature).length} bytes
+                              </span>
+                            </span>
                             <ModeBadge mode={signMode} />
                           </div>
                           <ActionRow>
