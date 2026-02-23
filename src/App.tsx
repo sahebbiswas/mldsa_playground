@@ -465,6 +465,7 @@ if __name__ == "__main__":
             {HASH_ALGS.map((h) => (
               <button
                 key={h}
+                title={`Select ${h} as pre-hash algorithm`}
                 onClick={() => onHashAlgChange(h)}
                 className={cn(
                   'px-3 py-1 text-[10px] font-mono border transition-colors',
@@ -488,6 +489,7 @@ if __name__ == "__main__":
         </label>
         <input
           type="text"
+          title="Context string to cryptographically bind the signature to specific protocol metadata"
           value={context}
           onChange={(e) => onContextChange(e.target.value)}
           placeholder="e.g. production-v2 or leave empty"
@@ -545,6 +547,7 @@ if __name__ == "__main__":
           {VARIANTS.map((v) => (
             <button
               key={v}
+              title={`Switch security parameter to ${v}`}
               onClick={() => setVariant(v)}
               className={cn(
                 'px-3 py-1 text-[11px] font-mono border border-[#141414] transition-colors',
@@ -569,6 +572,7 @@ if __name__ == "__main__":
           ] as const).map(([tab, icon, label]) => (
             <button
               key={tab}
+              title={`Navigate to ${label}`}
               onClick={() => setActiveTab(tab)}
               className={cn(
                 'w-full flex items-center gap-3 p-4 border border-[#141414] text-left transition-all',
@@ -640,6 +644,7 @@ if __name__ == "__main__":
                       </ActionRow>
                     </div>
                     <textarea
+                      title="Paste the hex encoded public key here"
                       value={publicKey}
                       onChange={(e) => { setPublicKey(e.target.value); setResult(null); }}
                       placeholder="Enter hex-encoded public key..."
@@ -668,6 +673,7 @@ if __name__ == "__main__":
                       </ActionRow>
                     </div>
                     <textarea
+                      title="Paste the generated digital signature hex here"
                       value={signature}
                       onChange={(e) => { setSignature(e.target.value); setResult(null); }}
                       placeholder="Enter hex-encoded signature..."
@@ -687,6 +693,7 @@ if __name__ == "__main__":
                     </label>
                     <input
                       type="text"
+                      title="Enter the exact message string that was signed"
                       value={message}
                       onChange={(e) => { setMessage(e.target.value); setResult(null); }}
                       placeholder="Enter the message that was signed..."
@@ -716,6 +723,7 @@ if __name__ == "__main__":
                   </div>
 
                   <button
+                    title="Run cryptographic ML-DSA algorithms to verify the signature"
                     onClick={handleInspect}
                     disabled={isInspecting || !publicKey || !signature || !message}
                     className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
@@ -966,6 +974,7 @@ if __name__ == "__main__":
                         <Download size={12} /> Export JSON
                       </button>
                       <button onClick={handleGenerateKeys}
+                        title="Generate a secure post-quantum lattice keypair"
                         className="px-4 py-2 border border-[#141414] bg-[#141414] text-[#E4E3E0] hover:opacity-80 transition-colors font-mono text-xs uppercase tracking-widest">
                         Generate New Pair
                       </button>
@@ -1040,6 +1049,7 @@ if __name__ == "__main__":
                       </label>
                       <input
                         type="text"
+                        title="Type the payload to be mathematically signed"
                         value={genMessage}
                         onChange={(e) => { setGenMessage(e.target.value); setGenSignature(''); }}
                         className="w-full p-3 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none"
@@ -1069,6 +1079,7 @@ if __name__ == "__main__":
                     </div>
 
                     <button
+                      title="Compute the lattice signature for this payload"
                       onClick={handleSign}
                       disabled={!genKeys}
                       className="w-full py-3 border border-[#141414] bg-[#141414] text-[#E4E3E0] font-serif italic disabled:opacity-30 flex items-center justify-center gap-2"
@@ -1149,6 +1160,7 @@ if __name__ == "__main__":
                 <div className="space-y-4">
                   <input type="file" ref={x509UploadRef} onChange={handleX509Upload} className="hidden" accept=".pem,.cer,.der,.crt" />
                   <button
+                    title="Select an X.509 certificate file to parse its structure and mathematically verify embedded ML-DSA signatures"
                     onClick={() => { setX509Result(null); setX509VerifyValid(null); setX509IssuerPubHex(''); x509UploadRef.current?.click(); }}
                     className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-[#141414]/20 hover:border-[#141414]/50 hover:bg-[#141414]/5 transition-colors gap-3 cursor-pointer"
                   >
