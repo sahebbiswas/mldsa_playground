@@ -46,7 +46,7 @@ import {
   SigningOptions,
   InspectionResult,
 } from './services/mldsa';
-import { parseCertificate, verifyX509Signature, X509ParseResult } from './services/x509';
+import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -172,6 +172,7 @@ export default function App() {
   const [x509IssuerPubHex, setX509IssuerPubHex] = useState('');
   const x509UploadRef = useRef<HTMLInputElement>(null);
   const x509IssuerUploadRef = useRef<HTMLInputElement>(null);
+  const [x509DragActive, setX509DragActive] = useState(false);
 
   // ── Inspect handlers ──────────────────────────────────────────────────────
 
@@ -308,25 +309,17 @@ export default function App() {
 
   // ── X.509 Handlers ────────────────────────────────────────────────────────
 
-  const handleX509Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const loadX509File = async (file: File) => {
     // Read file. If it ends in .pem or .crt it might be text, .der or .cer might be binary.
     // readBinFile handles both well enough since text is just bytes, and we decode it in the service if it's PEM.
     try {
       const bytes = await readBinFile(file);
-      // Attempt to parse as text to see if it's PEM
-      let textAttempt = '';
-      try { textAttempt = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch (e) { }
-
-      const parsed = parseCertificate(textAttempt.includes('-----BEGIN CERTIFICATE-----') ? textAttempt : bytes);
+      const parsed = processCertificateBytes(bytes);
       setX509Result(parsed);
       setX509VerifyValid(null);
       setX509IssuerPubHex('');
 
       if (parsed.valid && parsed.details?.isSelfSigned && parsed.details.signatureVariant) {
-        // Auto-verify self-signed
         const isValid = verifyX509Signature(
           parsed.details.tbsBytes,
           parsed.details.signatureValueBytes,
@@ -339,7 +332,34 @@ export default function App() {
       setX509Result({ valid: false, error: 'Failed to read file: ' + err.message });
       setX509VerifyValid(null);
     }
+  };
+
+  const handleX509Upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await loadX509File(file);
     e.target.value = '';
+  };
+
+  const handleX509Drop = async (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setX509DragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    await loadX509File(file);
+  };
+
+  const handleX509DragOver = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!x509DragActive) setX509DragActive(true);
+  };
+
+  const handleX509DragLeave = (e: React.DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setX509DragActive(false);
   };
 
   const handleVerifyX509 = () => {
@@ -1232,16 +1252,26 @@ if __name__ == "__main__":
                 <div className="space-y-4">
                   <input type="file" ref={x509UploadRef} onChange={handleX509Upload} className="hidden" accept=".pem,.cer,.der,.crt" />
                   <button
+                    type="button"
                     title="Select an X.509 certificate file to parse its structure and mathematically verify embedded ML-DSA signatures"
                     onClick={() => { setX509Result(null); setX509VerifyValid(null); setX509IssuerPubHex(''); x509UploadRef.current?.click(); }}
-                    className="w-full flex flex-col items-center justify-center p-8 border-2 border-dashed border-[#141414]/20 hover:border-[#141414]/50 hover:bg-[#141414]/5 transition-colors gap-3 cursor-pointer"
+                    onDragOver={handleX509DragOver}
+                    onDragLeave={handleX509DragLeave}
+                    onDrop={handleX509Drop}
+                    className={cn(
+                      'w-full flex flex-col items-center justify-center p-8 border-2 border-dashed transition-colors gap-3 cursor-pointer',
+                      x509DragActive
+                        ? 'border-[#141414] bg-[#141414]/5'
+                        : 'border-[#141414]/20 hover:border-[#141414]/50 hover:bg-[#141414]/5',
+                    )}
                   >
                     <div className="p-3 bg-white rounded-full shadow-sm">
                       <FileCheck2 size={24} className="text-[#141414]" />
                     </div>
                     <div className="text-center">
                       <span className="font-bold block">Upload X.509 Certificate</span>
-                      <span className="text-xs opacity-50 font-mono">Supports DER and PEM formats</span>
+                      <span className="text-xs opacity-50 font-mono block">Supports DER and PEM formats</span>
+                      <span className="text-[10px] opacity-40 font-mono mt-1 block">…or drag &amp; drop the certificate file here</span>
                     </div>
                   </button>
                   {x509Result?.error && (
@@ -1295,6 +1325,17 @@ if __name__ == "__main__":
                           <div className="space-y-1">
                             <span className="text-[10px] uppercase font-bold tracking-wider opacity-40">Public Key Size</span>
                             <p className="text-xs font-mono">{x509Result.details.publicKeyBytes.length} bytes</p>
+                            <button
+                              type="button"
+                              onClick={() => downloadBinary(
+                                `x509-pubkey-${(x509Result.details?.signatureVariant || 'unknown').toString().toLowerCase()}.bin`,
+                                x509Result.details!.publicKeyBytes
+                              )}
+                              className="mt-2 inline-flex items-center gap-2 px-3 py-1 border border-[#141414]/30 text-[10px] font-mono uppercase tracking-widest hover:border-[#141414] hover:bg-[#141414]/5 transition-colors"
+                            >
+                              <Download size={10} />
+                              Export Public Key .bin
+                            </button>
                           </div>
                         </div>
                       </div>

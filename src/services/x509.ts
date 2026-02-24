@@ -118,6 +118,21 @@ export const parseCertificate = (fileData: string | Uint8Array): X509ParseResult
 };
 
 /**
+ * Processes raw certificate bytes (e.g. from file upload or drag-and-drop)
+ * and returns parse result. Handles PEM vs DER detection.
+ */
+export const processCertificateBytes = (bytes: Uint8Array): X509ParseResult => {
+    let textAttempt = '';
+    try {
+        textAttempt = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    } catch {
+        // Not valid UTF-8, treat as DER
+    }
+    const isPem = textAttempt.includes('-----BEGIN CERTIFICATE-----');
+    return parseCertificate(isPem ? textAttempt : bytes);
+};
+
+/**
  * Verifies an X509 ML-DSA signature using Noble FIPS 204 implementation
  */
 export const verifyX509Signature = (

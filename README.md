@@ -11,11 +11,11 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Context Strings:** Full support for FIPS 204 context strings (up to 255 bytes).
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
 - **Binary Payload Support [NEW]:** Import raw `.bin` files for payloads/messages in both signing and verification. Features dynamic byte counting and visual HEX badges.
-- **X.509 Certificates [NEW]:** Parses and verifies ML-DSA signatures embedded in X.509 Certificates (DER, PEM). Supports extracting Subject, Issuer, Validity periods, and OID signature variance mapping.
+- **X.509 Certificates [NEW]:** Drag-and-drop or upload X.509 Certificates (DER, PEM) to parse and verify embedded ML-DSA signatures. Supports extracting Subject, Issuer, Validity periods, OID signature variant mapping, and exporting the embedded public key as a raw `.bin` file.
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
 - **Experimental Legacy Checks:** Includes a testing mode to check if signatures were generated with older CRYSTALS-Dilithium standards rather than final FIPS 204 formulas.
-- **Export & Import:** Swap keys, signatures, and payloads using JSON bundles or raw binary (`.bin`) files.
-- **Automated Tests:** Comprehensive unit test suite using `vitest` covering all cryptographic variants and message types.
+- **Export & Import:** Swap keys, signatures, payloads, and X.509-derived public keys using JSON bundles or raw binary (`.bin`) files.
+- **Automated Tests:** Comprehensive unit test suite using `vitest` covering all ML-DSA variants, binary payloads, and X.509 certificate parsing/verification.
 - **CI/CD:** Automated GitHub Actions workflow to ensure build stability and test integrity on every push.
 
 ## Getting Started
@@ -83,10 +83,11 @@ The easiest way to make this available online is using modern static hosting lik
 
 ### 4. X.509 Certificates
 1. Navigate to the **X.509 Certificates** tab.
-2. Upload a certificate (.pem, .cer, .der, .crt).
-3. The platform will decode the ASN.1 structure and display the issuer, subject, algorithm OID, and validity periods.
-4. If the certificate is self-signed, it will automatically undergo cryptographic signature verification against its own embedded public ML-DSA key.
+2. Either click the upload card or drag-and-drop a certificate file (.pem, .cer, .der, .crt) onto it.
+3. The platform will decode the ASN.1 structure and display the issuer, subject, serial number, algorithm OID / ML-DSA variant, validity periods, and embedded public key size.
+4. If the certificate is self-signed with an ML-DSA signature, it will automatically undergo cryptographic verification against its own embedded public key.
 5. If the certificate is issued by a different entity, a secondary input will appear allowing you to import the Issuer's raw Public Key (`.bin` or hex) to test the signature.
+6. When a certificate parses successfully, you can export the embedded subject public key as a raw `.bin` file for reuse elsewhere in the app.
 
 ## Underlying Cryptography
 
