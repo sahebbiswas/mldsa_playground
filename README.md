@@ -10,7 +10,6 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Pure ML-DSA & HashML-DSA:** Supports standard signing, as well as HashML-DSA with pre-hashing (SHA-256, SHA-384, SHA-512).
 - **Deterministic Signatures (Advanced):** Optional deterministic ML-DSA signing mode that disables extra randomness so identical inputs (key, message, context, mode) yield identical signatures — useful for debugging, reproducible test vectors, and protocol analysis.
 - **Context Strings:** Full support for FIPS 204 context strings (up to 255 bytes).
-- **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.
 - **Binary Payload Support [NEW]:** Import raw `.bin` files for payloads/messages in both signing and verification. Features dynamic byte counting and visual HEX badges.
 - **X.509 Certificates [NEW]:** Drag-and-drop or upload X.509 Certificates (DER, PEM) to parse and verify embedded ML-DSA signatures. Supports extracting Subject, Issuer, Validity periods, OID signature variant mapping, and exporting the embedded public key as a raw `.bin` file.
 - **Deep Inspection:** Verifies signatures and provides a step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash ($`\tilde{c}`$) is derived.

@@ -1186,7 +1186,7 @@ if __name__ == "__main__":
                     >
                       <ChevronDown size={14} className={cn('transition-transform', showAdvancedSign && 'rotate-180')} />
                       Advanced Options
-                      {(signMode === 'hash-ml-dsa' || signContext) && (
+                      {(signMode === 'hash-ml-dsa' || signContext || signDeterministic) && (
                         <span className="ml-1 px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] rounded-sm font-mono">active</span>
                       )}
                     </button>
