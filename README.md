@@ -77,7 +77,7 @@ The easiest way to make this available online is using modern static hosting lik
 ### 3. Inspecting & Verifying
 1. Navigate to the **Inspect Signature** tab (or click "Send to Inspector" from the signing page).
 2. Input the hex-encoded Public Key, Signature, and Message. Alternatively, use the **Import .bin** buttons.
-3. If the signature was created using a context string, HashML-DSA, or deterministic mode, expand **Verification Options** and match those settings (mode, hash, context).
+3. If the signature was created using a context string or HashML-DSA, expand **Verification Options** and match those settings (mode, hash, context).
 4. *(Advanced)* If you suspect you have an older non-FIPS signature, check the **Experimental Legacy CRYSTALS-Dilithium verification** box.
 5. Click **Inspect & Verify**.
 6. If valid, the app will display a **SHAKE256 Cryptographic Reconstruction** panel, breaking down the exact steps FIPS 204 uses to construct the message representative ($\mu$) and the challenge hash ($`\tilde{c}`$).
