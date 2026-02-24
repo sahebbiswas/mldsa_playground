@@ -157,6 +157,7 @@ export default function App() {
   const [signContext, setSignContext] = useState('');
   const [signHashAlg, setSignHashAlg] = useState<HashAlg>('SHA-256');
   const [showAdvancedSign, setShowAdvancedSign] = useState(false);
+  const [signDeterministic, setSignDeterministic] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
   // Key generation binary import refs
@@ -183,7 +184,10 @@ export default function App() {
       mode: inspectMode,
       contextText: inspectContext,
       hashAlg: inspectHashAlg,
-      checkLegacyMode: inspectLegacy
+      checkLegacyMode: inspectLegacy,
+      // Verification is inherently deterministic; we thread this flag only for
+      // symmetry with the signing UI and potential future use.
+      deterministic: false,
     };
     const msgInput = isMessageBinary ? hexToUint8Array(message) : message;
     const res = await inspectSignature(variant, publicKey, signature, msgInput, opts);
@@ -234,7 +238,12 @@ export default function App() {
 
   const handleSign = () => {
     if (!genKeys) return;
-    const opts: SigningOptions = { mode: signMode, contextText: signContext, hashAlg: signHashAlg };
+    const opts: SigningOptions = {
+      mode: signMode,
+      contextText: signContext,
+      hashAlg: signHashAlg,
+      deterministic: signDeterministic,
+    };
     const msgInput = isGenMessageBinary ? hexToUint8Array(genMessage) : genMessage;
     const sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
     setGenSignature(sig);
@@ -482,7 +491,8 @@ if __name__ == "__main__":
   /** Signing / Verify options panel (shared between sign + inspect tabs) */
   const AdvancedOptions = ({
     mode, onModeChange, context, onContextChange, hashAlg, onHashAlgChange, label,
-    inspectLegacy, onInspectLegacyChange
+    inspectLegacy, onInspectLegacyChange,
+    deterministic, onDeterministicChange,
   }: {
     mode: SignMode; onModeChange: (m: SignMode) => void;
     context: string; onContextChange: (c: string) => void;
@@ -490,6 +500,8 @@ if __name__ == "__main__":
     label?: string;
     inspectLegacy?: boolean;
     onInspectLegacyChange?: (v: boolean) => void;
+    deterministic?: boolean;
+    onDeterministicChange?: (v: boolean) => void;
   }) => (
     <div className="space-y-4 p-4 border border-[#141414]/20 bg-[#141414]/3 rounded-sm">
       {label && <p className="text-[10px] uppercase font-bold opacity-40 tracking-wider">{label}</p>}
@@ -568,6 +580,21 @@ if __name__ == "__main__":
           />
           <span className="text-[10px] uppercase font-bold opacity-60">
             Experimental: Test legacy CRYSTALS-Dilithium verification
+          </span>
+        </label>
+      )}
+
+      {/* Deterministic signing toggle, when provided */}
+      {onDeterministicChange && (
+        <label className="flex items-center gap-2 mt-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!deterministic}
+            onChange={(e) => onDeterministicChange(e.target.checked)}
+            className="w-3 h-3 accent-[#141414]"
+          />
+          <span className="text-[10px] uppercase font-bold opacity-60">
+            Deterministic ML-DSA signatures (disable extra randomness)
           </span>
         </label>
       )}
@@ -1159,7 +1186,7 @@ if __name__ == "__main__":
                     >
                       <ChevronDown size={14} className={cn('transition-transform', showAdvancedSign && 'rotate-180')} />
                       Advanced Options
-                      {(signMode === 'hash-ml-dsa' || signContext) && (
+                      {(signMode === 'hash-ml-dsa' || signContext || signDeterministic) && (
                         <span className="ml-1 px-1.5 py-0.5 bg-violet-100 text-violet-700 text-[9px] rounded-sm font-mono">active</span>
                       )}
                     </button>
@@ -1169,6 +1196,8 @@ if __name__ == "__main__":
                         mode={signMode} onModeChange={(m) => { setSignMode(m); setGenSignature(''); }}
                         context={signContext} onContextChange={(c) => { setSignContext(c); setGenSignature(''); }}
                         hashAlg={signHashAlg} onHashAlgChange={(h) => { setSignHashAlg(h); setGenSignature(''); }}
+                        deterministic={signDeterministic}
+                        onDeterministicChange={(v) => { setSignDeterministic(v); setGenSignature(''); }}
                       />
                     )}
                   </div>

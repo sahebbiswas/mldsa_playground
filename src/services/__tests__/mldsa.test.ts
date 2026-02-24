@@ -13,7 +13,7 @@ describe('mldsa service', () => {
 
     it('should generate valid keypairs for all variants', async () => {
         for (const variant of variants) {
-            const keys = await generateKeyPair(variant);
+            const keys = generateKeyPair(variant);
             expect(keys.publicKey).toBeDefined();
             expect(keys.privateKey).toBeDefined();
             expect(typeof keys.publicKey).toBe('string');
@@ -23,7 +23,7 @@ describe('mldsa service', () => {
 
     it('should sign and verify string messages', async () => {
         const variant = 'ML-DSA-65';
-        const keys = await generateKeyPair(variant);
+        const keys = generateKeyPair(variant);
         const message = 'Hello, ML-DSA Test!';
 
         const opts = { mode: 'pure' as const, contextText: '', hashAlg: 'SHA-256' as const };
@@ -36,7 +36,7 @@ describe('mldsa service', () => {
 
     it('should sign and verify binary messages (Uint8Array)', async () => {
         const variant = 'ML-DSA-44';
-        const keys = await generateKeyPair(variant);
+        const keys = generateKeyPair(variant);
         const message = new Uint8Array([0x01, 0x02, 0x03, 0x04, 0x05, 0xde, 0xad, 0xbe, 0xef]);
 
         const opts = { mode: 'pure' as const, contextText: '', hashAlg: 'SHA-256' as const };
@@ -47,7 +47,7 @@ describe('mldsa service', () => {
 
     it('should fail verification with wrong message', async () => {
         const variant = 'ML-DSA-87';
-        const keys = await generateKeyPair(variant);
+        const keys = generateKeyPair(variant);
         const message = 'Correct Message';
         const wrongMessage = 'Wrong Message';
 
@@ -59,7 +59,7 @@ describe('mldsa service', () => {
 
     it('should support HashML-DSA mode', async () => {
         const variant = 'ML-DSA-65';
-        const keys = await generateKeyPair(variant);
+        const keys = generateKeyPair(variant);
         const message = 'HashML-DSA Test Message';
         const opts = { mode: 'hash-ml-dsa' as const, hashAlg: 'SHA-256' as const, contextText: '' };
 
@@ -72,7 +72,7 @@ describe('mldsa service', () => {
 
     it('should support context strings', async () => {
         const variant = 'ML-DSA-44';
-        const keys = await generateKeyPair(variant);
+        const keys = generateKeyPair(variant);
         const message = 'Context Test Message';
         const opts = { mode: 'pure' as const, contextText: 'test-context', hashAlg: 'SHA-256' as const };
 
@@ -85,6 +85,25 @@ describe('mldsa service', () => {
         // Invalid with different context
         const invalidResult = await inspectSignature(variant, keys.publicKey, signature, message, { mode: 'pure', contextText: 'wrong-context', hashAlg: 'SHA-256' as const });
         expect(invalidResult.valid).toBe(false);
+    });
+
+    it('should produce deterministic signatures when deterministic mode is enabled', async () => {
+        const variant = 'ML-DSA-44';
+        const keys = generateKeyPair(variant);
+        const message = 'Deterministic test message';
+        const optsDet = {
+            mode: 'pure' as const,
+            contextText: 'deterministic-context',
+            hashAlg: 'SHA-256' as const,
+            deterministic: true,
+        };
+
+        const sig1 = signMessage(variant, keys.privateKey, message, optsDet);
+        const sig2 = signMessage(variant, keys.privateKey, message, optsDet);
+        expect(sig1).toBe(sig2);
+
+        const verify = await inspectSignature(variant, keys.publicKey, sig1, message, optsDet);
+        expect(verify.valid).toBe(true);
     });
 
     it('should support HashML-DSA with SHA-384 and SHA-512', async () => {
