@@ -1,5 +1,5 @@
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { shake256 } from '@noble/hashes/sha3.js';
+import { Keccak, shake256 } from '@noble/hashes/sha3.js';
 import { sha256, sha384, sha512 } from '@noble/hashes/sha2.js';
 import { concatBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
@@ -139,22 +139,19 @@ export const inspectSignature = async (
     let reconstructedChallengeHex: string | undefined;
     const challengeByteLen = C_TILDE_BYTES[variant];
 
-    // Intercept shake256 to capture the reconstructed challenge (cTilde')
-    const originalCreate = (shake256 as any).create;
+    // Intercept Keccak.prototype.digest to capture the reconstructed challenge (cTilde')
+    // We can't patch shake256.create because it's a frozen property in ESM/noble.
+    const originalDigest = Keccak.prototype.digest;
     let capturedDigest: Uint8Array | undefined;
 
-    (shake256 as any).create = (createOpts: any) => {
-      const state = originalCreate(createOpts);
-      const originalDigest = state.digest;
-      state.digest = () => {
-        const res = originalDigest.call(state);
-        // Captured digest should be the size of the challenge/commitment hash (lambda/8)
-        if (createOpts?.dkLen === challengeByteLen) {
-          capturedDigest = res;
-        }
-        return res;
-      };
-      return state;
+    Keccak.prototype.digest = function () {
+      const res = originalDigest.apply(this);
+      // Captured digest should be the size of the challenge/commitment hash (lambda/8)
+      // and it's usually the one called internally by verify() at the end.
+      if ((this as any).outputLen === challengeByteLen) {
+        capturedDigest = res;
+      }
+      return res;
     };
 
     try {
@@ -170,7 +167,7 @@ export const inspectSignature = async (
         reconstructedChallengeHex = uint8ArrayToHex(capturedDigest);
       }
     } finally {
-      (shake256 as any).create = originalCreate;
+      Keccak.prototype.digest = originalDigest;
     }
 
     // ── Experimental Legacy Check ──────────────────────────────────────────
