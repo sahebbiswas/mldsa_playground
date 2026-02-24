@@ -1,5 +1,5 @@
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { shake256 } from '@noble/hashes/sha3.js';
+import { Keccak, shake256 } from '@noble/hashes/sha3.js';
 import { sha256, sha384, sha512 } from '@noble/hashes/sha2.js';
 import { concatBytes } from '@noble/hashes/utils.js';
 import { Buffer } from 'buffer';
@@ -40,6 +40,7 @@ export interface InspectionResult {
     muHex: string;  // μ   = SHAKE256(tr ∥ M', dkLen=64)
     zPreviewHex: string;  // 32-byte preview of z region
     hPreviewHex: string;  // 32-byte preview of h region (tail)
+    reconstructedChallengeHex?: string; // c̃' = SHAKE256(μ ∥ w₁Encode(w'₁))
   };
 }
 
@@ -135,13 +136,38 @@ export const inspectSignature = async (
 
     // ── Verify ──────────────────────────────────────────────────────────────
     let isValid: boolean;
-    if (opts.mode === 'pure') {
-      isValid = instance.verify(sig, msg, pk, { context: contextBytes.length ? contextBytes : undefined });
-    } else {
-      const hashFn = HASH_FNS[opts.hashAlg!];
-      isValid = (instance as any).prehash(hashFn).verify(sig, msg, pk, {
-        context: contextBytes.length ? contextBytes : undefined,
-      });
+    let reconstructedChallengeHex: string | undefined;
+    const challengeByteLen = C_TILDE_BYTES[variant];
+
+    // Intercept Keccak.prototype.digest to capture the reconstructed challenge (cTilde')
+    // We can't patch shake256.create because it's a frozen property in ESM/noble.
+    const originalDigest = Keccak.prototype.digest;
+    let capturedDigest: Uint8Array | undefined;
+
+    Keccak.prototype.digest = function () {
+      const res = originalDigest.apply(this);
+      // Captured digest should be the size of the challenge/commitment hash (lambda/8)
+      // and it's usually the one called internally by verify() at the end.
+      if ((this as any).outputLen === challengeByteLen) {
+        capturedDigest = res;
+      }
+      return res;
+    };
+
+    try {
+      if (opts.mode === 'pure') {
+        isValid = instance.verify(sig, msg, pk, { context: contextBytes.length ? contextBytes : undefined });
+      } else {
+        const hashFn = HASH_FNS[opts.hashAlg!];
+        isValid = (instance as any).prehash(hashFn).verify(sig, msg, pk, {
+          context: contextBytes.length ? contextBytes : undefined,
+        });
+      }
+      if (capturedDigest) {
+        reconstructedChallengeHex = uint8ArrayToHex(capturedDigest);
+      }
+    } finally {
+      Keccak.prototype.digest = originalDigest;
     }
 
     // ── Experimental Legacy Check ──────────────────────────────────────────
@@ -175,7 +201,6 @@ export const inspectSignature = async (
     const muHex = uint8ArrayToHex(mu);
 
     // ── SHAKE256 reconstruction metadata ─────────────────────────────────────
-    const challengeByteLen = C_TILDE_BYTES[variant];
     const challengeHex = sig.length >= challengeByteLen
       ? uint8ArrayToHex(sig.slice(0, challengeByteLen))
       : '';
@@ -208,6 +233,7 @@ export const inspectSignature = async (
         muHex,
         zPreviewHex,
         hPreviewHex,
+        reconstructedChallengeHex,
       },
     };
   } catch (err: any) {

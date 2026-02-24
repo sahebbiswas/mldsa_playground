@@ -107,9 +107,9 @@ function ModeBadge({ mode }: { mode: SignMode }) {
   );
 }
 
-function HexPreview({ label, hex, bytes }: { label: string; hex: string; bytes?: number }) {
+function HexPreview({ label, hex, bytes, className }: { label: string; hex: string; bytes?: number; className?: string }) {
   return (
-    <div className="space-y-1">
+    <div className={cn('space-y-1', className)}>
       <div className="flex justify-between items-center">
         <span className="text-[9px] uppercase font-bold opacity-40 tracking-wider">{label}</span>
         {bytes !== undefined && (
@@ -941,6 +941,14 @@ if __name__ == "__main__":
                                 c̃' = SHAKE256(μ ∥ w₁Encode(w'₁)) — reconstructed via lattice math
                               </span>
                             </div>
+                            {result.components.reconstructedChallengeHex && (
+                              <HexPreview
+                                label="Reconstructed Commitment Hash (c̃') — computed"
+                                hex={result.components.reconstructedChallengeHex}
+                                bytes={result.components.challengeByteLen}
+                                className="mb-2"
+                              />
+                            )}
                             <div className="flex items-center gap-3">
                               {result.valid
                                 ? <CheckCircle2 size={20} className="text-green-600 shrink-0" />
