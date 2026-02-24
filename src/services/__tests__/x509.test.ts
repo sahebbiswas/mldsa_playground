@@ -7,10 +7,13 @@ let TEST_CERT_PEM: string;
 
 beforeAll(async () => {
     const { generate } = await import('selfsigned');
-    const pems = await generate([{ name: 'commonName', value: 'test.example.com' }], {
-        days: 1,
-        keySize: 2048,
-    });
+    const pems = await generate(
+        [{ name: 'commonName', value: 'test.example.com' }],
+        {
+            // Keep options minimal to satisfy current SelfsignedOptions typings
+            keySize: 2048,
+        }
+    );
     TEST_CERT_PEM = pems.cert;
 });
 
