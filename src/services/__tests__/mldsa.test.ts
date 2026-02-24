@@ -87,6 +87,25 @@ describe('mldsa service', () => {
         expect(invalidResult.valid).toBe(false);
     });
 
+    it('should produce deterministic signatures when deterministic mode is enabled', async () => {
+        const variant = 'ML-DSA-44';
+        const keys = generateKeyPair(variant);
+        const message = 'Deterministic test message';
+        const optsDet = {
+            mode: 'pure' as const,
+            contextText: 'deterministic-context',
+            hashAlg: 'SHA-256' as const,
+            deterministic: true as const,
+        };
+
+        const sig1 = signMessage(variant, keys.privateKey, message, optsDet);
+        const sig2 = signMessage(variant, keys.privateKey, message, optsDet);
+        expect(sig1).toBe(sig2);
+
+        const verify = await inspectSignature(variant, keys.publicKey, sig1, message, optsDet);
+        expect(verify.valid).toBe(true);
+    });
+
     it('should support HashML-DSA with SHA-384 and SHA-512', async () => {
         const variant = 'ML-DSA-65';
         const keys = generateKeyPair(variant);

@@ -14,6 +14,12 @@ export interface SigningOptions {
   mode: SignMode;
   contextText: string;  // UTF-8 text → encoded to bytes before use
   hashAlg: HashAlg;  // only used when mode === 'hash-ml-dsa'
+  /**
+   * When true, disables extra entropy inside the signer so that ML-DSA signatures
+   * are computed deterministically for a given (key, message, context, mode).
+   * This is wired through to noble's `extraEntropy: false` SigOpts flag.
+   */
+  deterministic?: boolean;
   checkLegacyMode?: boolean; // experimental: also check against old CRYSTALS-Dilithium formulation
 }
 
@@ -260,7 +266,10 @@ export const signMessage = (
   const sk = hexToUint8Array(privateKeyHex);
   const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
   const contextBytes = new TextEncoder().encode(opts.contextText);
-  const ctxOpt = contextBytes.length ? { context: contextBytes } : {};
+  const ctxOpt: { context?: Uint8Array; extraEntropy?: Uint8Array | false } = {};
+  if (contextBytes.length) ctxOpt.context = contextBytes;
+  // Deterministic mode: disable noble's extra entropy so signatures are fully deterministic
+  if (opts.deterministic) ctxOpt.extraEntropy = false;
 
   if (opts.mode === 'pure') {
     return uint8ArrayToHex(instance.sign(msg, sk, ctxOpt));
