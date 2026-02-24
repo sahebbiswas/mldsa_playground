@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { generateKeyPair, signMessage, inspectSignature } from '../mldsa';
+import {
+    generateKeyPair,
+    signMessage,
+    inspectSignature,
+    hexToUint8Array,
+    uint8ArrayToHex,
+    getMLDSAInstance,
+} from '../mldsa';
 
 describe('mldsa service', () => {
     const variants = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'] as const;
@@ -78,5 +85,66 @@ describe('mldsa service', () => {
         // Invalid with different context
         const invalidResult = await inspectSignature(variant, keys.publicKey, signature, message, { mode: 'pure', contextText: 'wrong-context', hashAlg: 'SHA-256' as const });
         expect(invalidResult.valid).toBe(false);
+    });
+
+    it('should support HashML-DSA with SHA-384 and SHA-512', async () => {
+        const variant = 'ML-DSA-65';
+        const keys = generateKeyPair(variant);
+        const message = 'HashML-DSA multi-hash test';
+
+        for (const hashAlg of ['SHA-384', 'SHA-512'] as const) {
+            const opts = { mode: 'hash-ml-dsa' as const, hashAlg, contextText: '' };
+            const signature = signMessage(variant, keys.privateKey, message, opts);
+            const result = await inspectSignature(variant, keys.publicKey, signature, message, opts);
+            expect(result.valid).toBe(true);
+            expect(result.meta?.hashAlg).toBe(hashAlg);
+        }
+    });
+
+    it('should fail inspectSignature with invalid hex public key', async () => {
+        const result = await inspectSignature(
+            'ML-DSA-44',
+            'not-valid-hex!!!',
+            '00'.repeat(100),
+            'msg',
+            { mode: 'pure', contextText: '', hashAlg: 'SHA-256' }
+        );
+        expect(result.valid).toBe(false);
+        expect(result.error).toBeDefined();
+    });
+
+    it('should fail inspectSignature with empty public key', async () => {
+        const keys = generateKeyPair('ML-DSA-44');
+        const opts = { mode: 'pure' as const, contextText: '', hashAlg: 'SHA-256' as const };
+        const sig = signMessage('ML-DSA-44', keys.privateKey, 'test', opts);
+        const result = await inspectSignature('ML-DSA-44', '', sig, 'test', opts);
+        expect(result.valid).toBe(false);
+    });
+});
+
+describe('mldsa helpers', () => {
+    it('should round-trip hexToUint8Array and uint8ArrayToHex', () => {
+        const hex = 'deadbeef0123456789abcdef';
+        const bytes = hexToUint8Array(hex);
+        expect(uint8ArrayToHex(bytes)).toBe(hex);
+    });
+
+    it('hexToUint8Array should handle hex with spaces and uppercase', () => {
+        const hex = 'DE AD BE EF';
+        const bytes = hexToUint8Array(hex);
+        expect(bytes).toHaveLength(4);
+        expect(bytes[0]).toBe(0xde);
+        expect(bytes[3]).toBe(0xef);
+    });
+
+    it('hexToUint8Array should return empty for odd-length hex', () => {
+        const bytes = hexToUint8Array('abc');
+        expect(bytes).toHaveLength(0);
+    });
+
+    it('getMLDSAInstance should return correct instance per variant', () => {
+        expect(getMLDSAInstance('ML-DSA-44')).toBeDefined();
+        expect(getMLDSAInstance('ML-DSA-65')).toBeDefined();
+        expect(getMLDSAInstance('ML-DSA-87')).toBeDefined();
     });
 });
