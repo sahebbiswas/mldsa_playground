@@ -40,6 +40,7 @@ export interface InspectionResult {
     muHex: string;  // μ   = SHAKE256(tr ∥ M', dkLen=64)
     zPreviewHex: string;  // 32-byte preview of z region
     hPreviewHex: string;  // 32-byte preview of h region (tail)
+    reconstructedChallengeHex?: string; // c̃' = SHAKE256(μ ∥ w₁Encode(w'₁))
   };
 }
 
@@ -135,13 +136,41 @@ export const inspectSignature = async (
 
     // ── Verify ──────────────────────────────────────────────────────────────
     let isValid: boolean;
-    if (opts.mode === 'pure') {
-      isValid = instance.verify(sig, msg, pk, { context: contextBytes.length ? contextBytes : undefined });
-    } else {
-      const hashFn = HASH_FNS[opts.hashAlg!];
-      isValid = (instance as any).prehash(hashFn).verify(sig, msg, pk, {
-        context: contextBytes.length ? contextBytes : undefined,
-      });
+    let reconstructedChallengeHex: string | undefined;
+    const challengeByteLen = C_TILDE_BYTES[variant];
+
+    // Intercept shake256 to capture the reconstructed challenge (cTilde')
+    const originalCreate = (shake256 as any).create;
+    let capturedDigest: Uint8Array | undefined;
+
+    (shake256 as any).create = (createOpts: any) => {
+      const state = originalCreate(createOpts);
+      const originalDigest = state.digest;
+      state.digest = () => {
+        const res = originalDigest.call(state);
+        // Captured digest should be the size of the challenge/commitment hash (lambda/8)
+        if (createOpts?.dkLen === challengeByteLen) {
+          capturedDigest = res;
+        }
+        return res;
+      };
+      return state;
+    };
+
+    try {
+      if (opts.mode === 'pure') {
+        isValid = instance.verify(sig, msg, pk, { context: contextBytes.length ? contextBytes : undefined });
+      } else {
+        const hashFn = HASH_FNS[opts.hashAlg!];
+        isValid = (instance as any).prehash(hashFn).verify(sig, msg, pk, {
+          context: contextBytes.length ? contextBytes : undefined,
+        });
+      }
+      if (capturedDigest) {
+        reconstructedChallengeHex = uint8ArrayToHex(capturedDigest);
+      }
+    } finally {
+      (shake256 as any).create = originalCreate;
     }
 
     // ── Experimental Legacy Check ──────────────────────────────────────────
@@ -175,7 +204,6 @@ export const inspectSignature = async (
     const muHex = uint8ArrayToHex(mu);
 
     // ── SHAKE256 reconstruction metadata ─────────────────────────────────────
-    const challengeByteLen = C_TILDE_BYTES[variant];
     const challengeHex = sig.length >= challengeByteLen
       ? uint8ArrayToHex(sig.slice(0, challengeByteLen))
       : '';
@@ -208,6 +236,7 @@ export const inspectSignature = async (
         muHex,
         zPreviewHex,
         hPreviewHex,
+        reconstructedChallengeHex,
       },
     };
   } catch (err: any) {
