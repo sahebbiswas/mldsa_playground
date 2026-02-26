@@ -137,6 +137,8 @@ export default function App() {
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectMode, setInspectMode] = useState<SignMode>('pure');
   const [inspectContext, setInspectContext] = useState('');
+  /** Raw hex context bytes from a KAT vector — takes priority over inspectContext in handleInspect. */
+  const [inspectContextRawHex, setInspectContextRawHex] = useState<string | undefined>(undefined);
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
   const [inspectLegacy, setInspectLegacy] = useState(false);
   const [isMessageBinary, setIsMessageBinary] = useState(false);
@@ -184,6 +186,7 @@ export default function App() {
     const opts: SigningOptions = {
       mode: inspectMode,
       contextText: inspectContext,
+      contextRawHex: inspectContextRawHex,
       hashAlg: inspectHashAlg,
       checkLegacyMode: inspectLegacy,
       // Verification is inherently deterministic; we thread this flag only for
@@ -433,6 +436,7 @@ export default function App() {
     setIsMessageBinary(isGenMessageBinary);
     setInspectMode(signMode);
     setInspectContext(signContext);
+    setInspectContextRawHex(undefined); // normal flow uses UTF-8 text context
     setInspectHashAlg(signHashAlg);
     if (signMode === 'hash-ml-dsa' || signContext) setShowAdvancedVerify(true);
     setInspectLegacy(false);
@@ -448,7 +452,8 @@ export default function App() {
     setMessage(payload.message);
     setIsMessageBinary(true); // KAT messages are always hex-encoded bytes
     setInspectMode(payload.mode);
-    setInspectContext(payload.context);
+    setInspectContext(''); // raw hex context is carried separately
+    setInspectContextRawHex(payload.contextRawHex || undefined);
     setInspectHashAlg(payload.hashAlg);
     if (payload.showAdvanced) setShowAdvancedVerify(true);
     setInspectLegacy(false);
@@ -832,11 +837,23 @@ if __name__ == "__main__":
                     <AdvancedOptions
                       label="Mode & Context used during signing"
                       mode={inspectMode} onModeChange={setInspectMode}
-                      context={inspectContext} onContextChange={setInspectContext}
+                      context={inspectContext} onContextChange={(c) => { setInspectContext(c); setInspectContextRawHex(undefined); }}
                       hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
                       // @ts-ignore - passing optional props for the legacy switch
                       inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
                     />
+                  )}
+                  {inspectContextRawHex && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 border border-blue-300 bg-blue-50 text-[10px] font-mono text-blue-700">
+                      <span className="font-bold">Context (raw bytes from KAT):</span>
+                      <span className="opacity-70 truncate max-w-xs">0x{inspectContextRawHex}</span>
+                      <button
+                        type="button"
+                        onClick={() => setInspectContextRawHex(undefined)}
+                        className="ml-auto opacity-60 hover:opacity-100 shrink-0"
+                        title="Clear KAT context"
+                      >✕</button>
+                    </div>
                   )}
                 </div>
 

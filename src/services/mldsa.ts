@@ -13,6 +13,9 @@ export type HashAlg = 'SHA-256' | 'SHA-384' | 'SHA-512';
 export interface SigningOptions {
   mode: SignMode;
   contextText: string;  // UTF-8 text → encoded to bytes before use
+  /** Raw hex-encoded context bytes. When present, takes priority over contextText.
+   *  Use this when context is arbitrary binary (e.g. FIPS ACVP KAT vectors). */
+  contextRawHex?: string;
   hashAlg: HashAlg;  // only used when mode === 'hash-ml-dsa'
   /**
    * When true, disables extra entropy inside the signer so that ML-DSA signatures
@@ -133,7 +136,9 @@ export const inspectSignature = async (
     const pk = hexToUint8Array(publicKeyHex);
     const sig = hexToUint8Array(signatureHex);
     const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
-    const contextBytes = new TextEncoder().encode(opts.contextText);
+    const contextBytes = opts.contextRawHex
+      ? hexToUint8Array(opts.contextRawHex)
+      : new TextEncoder().encode(opts.contextText);
     const contextHex = uint8ArrayToHex(contextBytes);
 
     if (pk.length === 0 || sig.length === 0) {
@@ -265,7 +270,9 @@ export const signMessage = (
   const instance = getMLDSAInstance(variant);
   const sk = hexToUint8Array(privateKeyHex);
   const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
-  const contextBytes = new TextEncoder().encode(opts.contextText);
+  const contextBytes = opts.contextRawHex
+    ? hexToUint8Array(opts.contextRawHex)
+    : new TextEncoder().encode(opts.contextText);
   const ctxOpt: { context?: Uint8Array; extraEntropy?: Uint8Array | false } = {};
   if (contextBytes.length) ctxOpt.context = contextBytes;
   // Deterministic mode: disable noble's extra entropy so signatures are fully deterministic

@@ -49,7 +49,8 @@ export interface SendToInspectorPayload {
   message: string;
   mode: SignMode;
   hashAlg: HashAlg;
-  context: string;        // UTF-8 decoded context string (Inspector uses text, not hex)
+  /** Raw hex-encoded context bytes from the ACVP vector (may contain non-UTF8 bytes). */
+  contextRawHex: string;
   showAdvanced: boolean;
 }
 
@@ -183,22 +184,10 @@ function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendT
     const n = v.hashAlg.toUpperCase().replace(/[-_/\s]/g, '');
     if (n === 'SHA2384' || n === 'SHA384') hashAlg = 'SHA-384';
     else if (n === 'SHA2512' || n === 'SHA512') hashAlg = 'SHA-512';
-    // SHA3/SHAKE map to the closest for display; inspector will attempt verify
-    else if (n === 'SHA2256' || n === 'SHA256') hashAlg = 'SHA-256';
   }
 
-  // Context: Inspector expects UTF-8 text. ACVP context is hex.
-  // For display, try to decode as UTF-8; fall back to hex if non-printable.
-  let context = '';
-  if (v.context) {
-    try {
-      const bytes = new Uint8Array(v.context.match(/.{2}/g)!.map(b => parseInt(b, 16)));
-      const decoded = new TextDecoder().decode(bytes);
-      // Use decoded only if all chars are printable ASCII
-      context = /^[\x20-\x7E]*$/.test(decoded) ? decoded : '';
-    } catch { context = ''; }
-  }
-
+  // Pass context as raw hex — App.tsx will route it through contextRawHex in
+  // SigningOptions so mldsa.ts decodes it as bytes, not as UTF-8 text.
   return {
     variant,
     publicKey: v.pk,
@@ -206,7 +195,7 @@ function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendT
     message: v.message,
     mode,
     hashAlg,
-    context,
+    contextRawHex: v.context ?? '',
     showAdvanced: mode === 'hash-ml-dsa' || !!v.context,
   };
 }
