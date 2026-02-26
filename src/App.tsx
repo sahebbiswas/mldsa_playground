@@ -48,6 +48,7 @@ import {
 } from './services/mldsa';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
+import { Analytics } from '@vercel/analytics/react';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1492,6 +1493,7 @@ if __name__ == "__main__":
           <p className="text-[10px] opacity-40 font-mono">&copy; 2026 SAHEB BISWAS. ALL RIGHTS RESERVED.</p>
         </div>
       </footer >
+      <Analytics />
     </div >
   );
 }
