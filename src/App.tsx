@@ -48,7 +48,7 @@ import {
 } from './services/mldsa';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
-import KatTab from './components/KatTab';
+import KatTab, { type SendToInspectorPayload } from './components/KatTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -435,6 +435,22 @@ export default function App() {
     setInspectContext(signContext);
     setInspectHashAlg(signHashAlg);
     if (signMode === 'hash-ml-dsa' || signContext) setShowAdvancedVerify(true);
+    setInspectLegacy(false);
+    setActiveTab('inspect');
+    setResult(null);
+  };
+
+  // "Send to Inspector" from a KAT vector row
+  const sendKatToInspector = (payload: SendToInspectorPayload) => {
+    setVariant(payload.variant);
+    setPublicKey(payload.publicKey);
+    setSignature(payload.signature);
+    setMessage(payload.message);
+    setIsMessageBinary(false);
+    setInspectMode(payload.mode);
+    setInspectContext(payload.context);
+    setInspectHashAlg(payload.hashAlg);
+    if (payload.showAdvanced) setShowAdvancedVerify(true);
     setInspectLegacy(false);
     setActiveTab('inspect');
     setResult(null);
@@ -1440,6 +1456,7 @@ if __name__ == "__main__":
               <KatTab
                 variant={variant}
                 onVariantChange={setVariant}
+                onSendToInspector={sendKatToInspector}
               />
             ) : (
               <motion.div

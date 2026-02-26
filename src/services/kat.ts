@@ -19,8 +19,7 @@
  */
 
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { sha256, sha384, sha512, sha512_224, sha512_256 } from '@noble/hashes/sha2.js';
-import { sha3_224, sha3_256, sha3_384, sha3_512, shake128, shake256 } from '@noble/hashes/sha3.js';
+import { sha256, sha384, sha512 } from '@noble/hashes/sha2.js';
 import { MLDSAVariant, hexToUint8Array, HASH_FNS } from './mldsa';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -50,6 +49,10 @@ export interface KatVector {
 
 export type KatVectorResult = KatVector & {
   verifyOk: boolean;
+  /** True when this vector counts as a pass in the UI:
+   *  - crypto verify returned true, OR
+   *  - expectedResults says fail AND we also got fail (correct rejection) */
+  effectivePass: boolean;
   /** Expected result from an accompanying expectedResults.json, if loaded */
   expectedPassed?: boolean;
   /** Whether our result matches the expected result */
@@ -92,49 +95,16 @@ export const PK_BYTES: Record<MLDSAVariant, number> = {
 // ─── ACVP hashAlg → noble HASH_FNS key ───────────────────────────────────────
 
 /**
- * Map ACVP hashAlg strings to a { fn, label } pair for noble's prehash() API.
- *
- * Noble's prehash() expects a function with an `.oid` property. The SHA3/SHAKE
- * functions from @noble/hashes/sha3.js already have OIDs attached internally
- * (via oidNist). SHAKE variants are XOFs so we wrap them with a fixed dkLen:
- *   SHAKE-128 → 32 bytes  (per FIPS 204 Table 1, HashML-DSA-44 uses SHAKE128 d=256)
- *   SHAKE-256 → 64 bytes  (per FIPS 204 Table 1, HashML-DSA-65/87 use SHAKE256 d=512)
- *
- * Returns null only for completely unrecognised strings.
+ * Map ACVP hashAlg strings to the app's HashAlg type used by HASH_FNS.
+ * FIPS 204 HashML-DSA supports SHA2-256, SHA2-384, SHA2-512 (and SHA3 variants
+ * but noble's current HASH_FNS only covers SHA-2; SHA-3 vectors will be skipped).
  */
 function resolveHashFn(acvpHashAlg: string): { fn: any; label: string } | null {
-  const n = acvpHashAlg.toUpperCase().replace(/[-_/\s]/g, '');
-
-  // ── SHA-2 ──────────────────────────────────────────────────────────────────
-  if (n === 'SHA2256' || n === 'SHA256')       return { fn: sha256,       label: 'SHA2-256' };
-  if (n === 'SHA2384' || n === 'SHA384')       return { fn: sha384,       label: 'SHA2-384' };
-  if (n === 'SHA2512' || n === 'SHA512')       return { fn: sha512,       label: 'SHA2-512' };
-  if (n === 'SHA2224' || n === 'SHA224')       return { fn: HASH_FNS['SHA-256'], label: 'SHA2-224' }; // not in noble sha2 by that name — use sha2 wrappers from mldsa if needed
-  if (n === 'SHA2512224' || n === 'SHA512224') return { fn: sha512_224,   label: 'SHA2-512/224' };
-  if (n === 'SHA2512256' || n === 'SHA512256') return { fn: sha512_256,   label: 'SHA2-512/256' };
-
-  // ── SHA-3 (fixed output, OIDs already attached by noble) ──────────────────
-  if (n === 'SHA3224')  return { fn: sha3_224, label: 'SHA3-224' };
-  if (n === 'SHA3256')  return { fn: sha3_256, label: 'SHA3-256' };
-  if (n === 'SHA3384')  return { fn: sha3_384, label: 'SHA3-384' };
-  if (n === 'SHA3512')  return { fn: sha3_512, label: 'SHA3-512' };
-
-  // ── SHAKE (XOF — wrap with fixed output length, OIDs already attached) ────
-  // FIPS 204 §5.4: d = security parameter bits / 8
-  //   SHAKE-128: d = 32 bytes (256 bits)
-  //   SHAKE-256: d = 64 bytes (512 bits)
-  if (n === 'SHAKE128') {
-    const fn = (msg: Uint8Array) => shake128(msg, { dkLen: 32 });
-    fn.oid = (shake128 as any).oid;
-    return { fn, label: 'SHAKE-128' };
-  }
-  if (n === 'SHAKE256') {
-    const fn = (msg: Uint8Array) => shake256(msg, { dkLen: 64 });
-    fn.oid = (shake256 as any).oid;
-    return { fn, label: 'SHAKE-256' };
-  }
-
-  return null; // completely unrecognised
+  const normalised = acvpHashAlg.toUpperCase().replace(/[-_\s]/g, '');
+  if (normalised === 'SHA2256' || normalised === 'SHA256') return { fn: HASH_FNS['SHA-256'], label: 'SHA2-256' };
+  if (normalised === 'SHA2384' || normalised === 'SHA384') return { fn: HASH_FNS['SHA-384'], label: 'SHA2-384' };
+  if (normalised === 'SHA2512' || normalised === 'SHA512') return { fn: HASH_FNS['SHA-512'], label: 'SHA2-512' };
+  return null; // SHA3 variants or unknown — skip
 }
 
 // ─── Noble instance ───────────────────────────────────────────────────────────
@@ -194,10 +164,6 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
 
     for (const tc of group.tests) {
       const isExternalMu = group.externalMu === true && !!tc.mu;
-      // Per ACVP spec §8.3.2: hashAlg is a TEST CASE level field (tc.hashAlg),
-      // not a group level field. Some implementations also put it on the group
-      // as a convenience, so we use tc.hashAlg first, fall back to group.hashAlg.
-      const hashAlg = (tc as any).hashAlg ?? group.hashAlg;
       vectors.push({
         tcId: tc.tcId,
         tgId: group.tgId,
@@ -206,7 +172,7 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
         signature: tc.signature,
         context: tc.context ?? group.context,
         isExternalMu,
-        hashAlg,
+        hashAlg: group.hashAlg,
         signatureInterface: group.signatureInterface,
         preHash: group.preHash,
       });
@@ -387,11 +353,10 @@ export async function runKatVectors(
       // ── HashML-DSA (preHash mode) ──────────────────────────────────────
       } else if (v.preHash && v.preHash.toLowerCase() !== 'pure') {
         const resolved = v.hashAlg ? resolveHashFn(v.hashAlg) : null;
-        const hashLabel = resolved?.label ?? v.hashAlg ?? 'unknown hash';
         if (!resolved) {
-          modeLabel = `PreHash (${hashLabel})`;
+          modeLabel = `PreHash (${v.hashAlg ?? 'unknown'})`;
           modesSet.add(modeLabel);
-          note = `Unrecognised hash algorithm "${hashLabel}" — skipped`;
+          note = `Hash algorithm "${v.hashAlg ?? 'unknown'}" not supported by this implementation — skipped`;
           verifyOk = false;
           isSkipped = true;
         } else {
@@ -400,8 +365,11 @@ export async function runKatVectors(
           const sigBytesArr = hexToUint8Array(v.signature);
           const ctxBytes = v.context ? hexToUint8Array(v.context) : undefined;
           try {
+            // Use noble's prehash interface: instance.prehash(hashFn).verify(sig, msg, pk, { context? })
             verifyOk = (instance as any).prehash(resolved.fn).verify(
-              sigBytesArr, msgBytes, pkBytes,
+              sigBytesArr,
+              msgBytes,
+              pkBytes,
               { context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined },
             );
           } catch { verifyOk = false; }
@@ -433,12 +401,18 @@ export async function runKatVectors(
         ? verifyOk === expectedPassed
         : undefined;
 
-      results.push({ ...v, verifyOk, modeLabel, note, expectedPassed, matchesExpected });
+      // A vector counts as effectively passing when NOT skipped and either:
+      //   (a) crypto verify returned true, OR
+      //   (b) expected = fail AND we also got fail (correct rejection of a bad signature)
+      const effectivePass = !isSkipped && (verifyOk || (expectedPassed === false && matchesExpected === true));
+
+      results.push({ ...v, verifyOk, effectivePass, modeLabel, note, expectedPassed, matchesExpected });
     } catch (error: any) {
       skipped++;
       results.push({
         ...v,
         verifyOk: false,
+        effectivePass: false,
         modeLabel: 'Error',
         note: 'Exception during verification',
         error: error?.message ?? 'Unknown error',
@@ -446,7 +420,7 @@ export async function runKatVectors(
     }
   }
 
-  const passed = results.filter(r => r.verifyOk).length;
+  const passed = results.filter(r => r.effectivePass).length;
   const expectedMismatches = results.filter(r => r.matchesExpected === false).length;
 
   return {

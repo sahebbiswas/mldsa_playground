@@ -24,14 +24,16 @@ import {
   Download,
   FileCheck2,
   HelpCircle,
+  Search,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import type { MLDSAVariant } from '../services/mldsa';
+import type { MLDSAVariant, SignMode, HashAlg } from '../services/mldsa';
 import {
   parseKatFile,
   parseExpectedResults,
   runKatVectors,
   inferVariantFromVectors,
+  SIG_BYTES,
   type KatRunResult,
   type KatVectorResult,
   type ExpectedResultsMap,
@@ -39,9 +41,22 @@ import {
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
+/** Everything the Inspector tab needs to pre-populate from a KAT vector. */
+export interface SendToInspectorPayload {
+  variant: MLDSAVariant;
+  publicKey: string;
+  signature: string;
+  message: string;
+  mode: SignMode;
+  hashAlg: HashAlg;
+  context: string;        // UTF-8 decoded context string (Inspector uses text, not hex)
+  showAdvanced: boolean;
+}
+
 interface KatTabProps {
   variant: MLDSAVariant;
   onVariantChange: (v: MLDSAVariant) => void;
+  onSendToInspector: (payload: SendToInspectorPayload) => void;
 }
 
 const VARIANTS: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
@@ -70,10 +85,15 @@ function Tip({ text }: { text: string }) {
 
 // ─── Status pills ─────────────────────────────────────────────────────────────
 
-function VerifyPill({ ok, skipped }: { ok: boolean; skipped?: boolean }) {
+function VerifyPill({ ok, skipped, correctRejection }: { ok: boolean; skipped?: boolean; correctRejection?: boolean }) {
   if (skipped) return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold rounded-sm border border-[#141414]/20 text-[#141414]/40 bg-[#141414]/5">
       SKIP
+    </span>
+  );
+  if (correctRejection) return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold rounded-sm border border-green-400 text-green-700 bg-green-50">
+      <CheckCircle2 size={9} /> REJECT✓
     </span>
   );
   return (
@@ -101,7 +121,7 @@ function ExpectedPill({ expected, matches }: { expected: boolean; matches: boole
   );
 }
 
-function ModePill({ mode }: { mode: string }) {
+const ModePill: React.FC<{ mode: string }> = ({ mode }) => {
   const isLegacy = mode.includes('Legacy');
   const isPreHash = mode.includes('HashML-DSA');
   const isPreHashUnknown = mode.includes('PreHash');
@@ -120,6 +140,75 @@ function ModePill({ mode }: { mode: string }) {
       {mode}
     </span>
   );
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/** Bytes of SM hex to preview in legacy .rsp mode (rest truncated). */
+const SIG_PREVIEW_LEN = 64;
+
+// ─── TinyBtn — matches App.tsx ActionRow style ────────────────────────────────
+
+function TinyBtn({ onClick, children, className }: {
+  onClick: () => void; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn('text-[10px] flex items-center gap-1 hover:underline', className)}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ─── Build inspector payload from a KAT vector ────────────────────────────────
+
+function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendToInspectorPayload {
+  // For legacy .rsp: the stored signature is the raw SM (sig ‖ msg). Extract sig.
+  let sigHex = v.signature;
+  if (v._format === '__legacy_sm__') {
+    const sigLen = SIG_BYTES[variant];
+    sigHex = v.signature.slice(0, sigLen * 2); // hex chars = bytes * 2
+  }
+
+  // Map ACVP preHash+hashAlg → Inspector SignMode + HashAlg
+  const isHashMode = v.preHash && v.preHash.toLowerCase() !== 'pure' && !v.isExternalMu;
+  const mode: SignMode = isHashMode ? 'hash-ml-dsa' : 'pure';
+
+  // Map ACVP hashAlg string (e.g. "SHA2-256") → Inspector HashAlg (e.g. "SHA-256")
+  let hashAlg: HashAlg = 'SHA-256';
+  if (v.hashAlg) {
+    const n = v.hashAlg.toUpperCase().replace(/[-_/\s]/g, '');
+    if (n === 'SHA2384' || n === 'SHA384') hashAlg = 'SHA-384';
+    else if (n === 'SHA2512' || n === 'SHA512') hashAlg = 'SHA-512';
+    // SHA3/SHAKE map to the closest for display; inspector will attempt verify
+    else if (n === 'SHA2256' || n === 'SHA256') hashAlg = 'SHA-256';
+  }
+
+  // Context: Inspector expects UTF-8 text. ACVP context is hex.
+  // For display, try to decode as UTF-8; fall back to hex if non-printable.
+  let context = '';
+  if (v.context) {
+    try {
+      const bytes = new Uint8Array(v.context.match(/.{2}/g)!.map(b => parseInt(b, 16)));
+      const decoded = new TextDecoder().decode(bytes);
+      // Use decoded only if all chars are printable ASCII
+      context = /^[\x20-\x7E]*$/.test(decoded) ? decoded : '';
+    } catch { context = ''; }
+  }
+
+  return {
+    variant,
+    publicKey: v.pk,
+    signature: sigHex,
+    message: v.message,
+    mode,
+    hashAlg,
+    context,
+    showAdvanced: mode === 'hash-ml-dsa' || !!v.context,
+  };
 }
 
 // ─── Vector row ───────────────────────────────────────────────────────────────
@@ -163,15 +252,16 @@ function HexField({ label, hex, tooltip }: { label: string; hex: string; tooltip
   );
 }
 
-function VectorRow({ v }: { v: KatVectorResult }) {
+const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToInspector: (p: SendToInspectorPayload) => void }> = ({ v, variant, onSendToInspector }) => {
   const [open, setOpen] = useState(false);
   const isSkipped = v.modeLabel.startsWith('PreHash (') || v.modeLabel === 'Error';
   const hasExpected = v.expectedPassed !== undefined;
+  const isCorrectRejection = !v.verifyOk && v.expectedPassed === false && v.matchesExpected === true;
 
   return (
     <div className={cn(
       'border-b border-[#141414]/10 last:border-0',
-      !v.verifyOk && !isSkipped && 'bg-red-50/60',
+      !v.effectivePass && !isSkipped && 'bg-red-50/60',
       hasExpected && v.matchesExpected === false && 'border-l-2 border-l-orange-400',
     )}>
       <button
@@ -182,7 +272,7 @@ function VectorRow({ v }: { v: KatVectorResult }) {
         <ChevronDown size={12} className={cn('shrink-0 opacity-40 transition-transform', open && 'rotate-180')} />
         <span className="font-mono text-[10px] opacity-40 w-16 shrink-0">tc#{v.tcId}</span>
 
-        <VerifyPill ok={v.verifyOk} skipped={isSkipped} />
+        <VerifyPill ok={v.effectivePass} skipped={isSkipped} correctRejection={isCorrectRejection} />
 
         <span className="flex items-center gap-1">
           <ModePill mode={v.modeLabel} />
@@ -254,6 +344,19 @@ function VectorRow({ v }: { v: KatVectorResult }) {
                   </span>
                 </div>
               )}
+
+              {/* Send to Inspector */}
+              <div className="flex items-center gap-3 pt-1 border-t border-[#141414]/10">
+                <TinyBtn
+                  onClick={() => onSendToInspector(buildInspectorPayload(v, variant))}
+                  className="text-blue-600"
+                >
+                  <Search size={10} /> Send to Inspector
+                </TinyBtn>
+                <span className="text-[9px] font-mono opacity-30">
+                  Loads this vector's pk, signature, and message into the Inspector tab
+                </span>
+              </div>
             </div>
           </motion.div>
         )}
@@ -261,9 +364,6 @@ function VectorRow({ v }: { v: KatVectorResult }) {
     </div>
   );
 }
-
-// Constant for sig preview in legacy mode display
-const SIG_PREVIEW_LEN = 64;
 
 // ─── Summary bar ─────────────────────────────────────────────────────────────
 
@@ -336,7 +436,7 @@ function SummaryBar({ result }: { result: KatRunResult }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function KatTab({ variant, onVariantChange }: KatTabProps) {
+export default function KatTab({ variant, onVariantChange, onSendToInspector }: KatTabProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const expectedInputRef = useRef<HTMLInputElement>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -350,6 +450,7 @@ export default function KatTab({ variant, onVariantChange }: KatTabProps) {
   const [expectedFileName, setExpectedFileName] = useState<string | null>(null);
   const [expectedResults, setExpectedResults] = useState<ExpectedResultsMap | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'failed' | 'mismatch'>('all');
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // Keep last parsed vectors so we can re-run when expectedResults are loaded
   const [lastVectors, setLastVectors] = useState<ReturnType<typeof parseKatFile> | null>(null);
 
@@ -440,7 +541,7 @@ export default function KatTab({ variant, onVariantChange }: KatTabProps) {
   };
 
   const displayVectors = result ? result.vectors.filter(v => {
-    if (filterMode === 'failed') return !v.verifyOk && !v.modeLabel.startsWith('PreHash (') && v.modeLabel !== 'Error';
+    if (filterMode === 'failed') return !v.effectivePass && !v.modeLabel.startsWith('PreHash (') && v.modeLabel !== 'Error';
     if (filterMode === 'mismatch') return v.matchesExpected === false;
     return true;
   }) : [];
@@ -487,23 +588,8 @@ export default function KatTab({ variant, onVariantChange }: KatTabProps) {
         </p>
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap gap-4 items-end">
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase font-bold opacity-40 tracking-wider flex items-center gap-1">
-            Fallback Variant
-            <Tip text="Auto-detected from public key length (1312B→44, 1952B→65, 2592B→87). This selector is only used if detection fails." />
-          </label>
-          <div className="flex gap-2">
-            {VARIANTS.map(v => (
-              <button key={v} type="button" onClick={() => setActiveVariant(v)}
-                className={cn('px-3 py-1 text-[10px] font-mono border transition-colors',
-                  activeVariant === v ? 'bg-[#141414] text-[#E4E3E0] border-[#141414]' : 'border-[#141414]/30 hover:border-[#141414]/60')}>
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
+      {/* Max Vectors (always visible) + Advanced toggle */}
+      <div className="flex flex-wrap items-end gap-4">
         <div className="space-y-1">
           <label className="text-[10px] uppercase font-bold opacity-40 tracking-wider flex items-center gap-1">
             Max Vectors
@@ -514,84 +600,123 @@ export default function KatTab({ variant, onVariantChange }: KatTabProps) {
             {[10, 25, 50, 100, 250, 500].map(n => <option key={n} value={n}>{n} vectors</option>)}
           </select>
         </div>
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen(o => !o)}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-[#141414]/20 text-[10px] font-mono uppercase tracking-widest opacity-50 hover:opacity-100 hover:border-[#141414]/50 transition-all"
+        >
+          <ChevronDown size={11} className={cn('transition-transform', advancedOpen && 'rotate-180')} />
+          Advanced
+          {hasExpected && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-1" />}
+        </button>
       </div>
 
-      {/* File loaders — side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* KAT prompt file */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold opacity-50 tracking-wider">
-            <FileText size={12} /> KAT Prompt File
-            <Tip text="The internalProjection.json (or .rsp) file containing test vectors with pk/message/signature fields." />
-          </div>
-          <input ref={fileInputRef} type="file" accept=".rsp,.txt,.json" className="hidden" onChange={handleInputChange} />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={handleDrop}
-            onDragOver={e => { e.preventDefault(); setDragActive(true); }}
-            onDragLeave={() => setDragActive(false)}
-            className={cn(
-              'w-full border-2 border-dashed p-6 flex flex-col items-center gap-2 transition-colors cursor-pointer',
-              dragActive ? 'border-[#141414] bg-[#141414]/5' : 'border-[#141414]/30 hover:border-[#141414]/60',
-            )}
+      {/* Advanced panel */}
+      <AnimatePresence>
+        {advancedOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
           >
-            {running ? <RefreshCw className="w-6 h-6 animate-spin opacity-40" /> : <Upload className="w-6 h-6 opacity-30" />}
-            <p className="text-xs font-serif italic opacity-60 text-center">
-              {running ? 'Running…' : fileName ? fileName : 'internalProjection.json or .rsp'}
-            </p>
-            {fileName && !running && (
-              <span className="text-[9px] font-mono opacity-40">Click to reload</span>
-            )}
-          </button>
-          {parseError && (
-            <div className="flex items-center gap-2 p-2 border border-red-400 bg-red-50 text-red-700 text-[10px] font-mono">
-              <AlertTriangle size={12} className="shrink-0" />
-              {parseError}
-              <button type="button" onClick={() => setParseError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
-            </div>
-          )}
-        </div>
+            <div className="border border-[#141414]/20 p-5 space-y-5 bg-[#141414]/3">
+              <p className="text-[9px] uppercase font-bold opacity-30 tracking-widest">Advanced Options</p>
 
-        {/* Expected results file */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold opacity-50 tracking-wider">
-            <FileCheck2 size={12} />
-            Expected Results
-            <span className="text-[9px] font-mono normal-case opacity-60">(optional)</span>
-            <Tip text="Load the companion expectedResults.json file from NIST ACVP-Server. Each test case has a testPassed field that will be compared against our result." />
-          </div>
-          <input ref={expectedInputRef} type="file" accept=".json" className="hidden" onChange={handleExpectedInputChange} />
-          <button
-            type="button"
-            onClick={() => expectedInputRef.current?.click()}
-            className={cn(
-              'w-full border-2 border-dashed p-6 flex flex-col items-center gap-2 transition-colors cursor-pointer',
-              hasExpected
-                ? 'border-blue-400 bg-blue-50'
-                : 'border-[#141414]/20 hover:border-[#141414]/40',
-            )}
-          >
-            <FileCheck2 className={cn('w-6 h-6', hasExpected ? 'text-blue-500' : 'opacity-20')} />
-            <p className="text-xs font-serif italic opacity-60 text-center">
-              {expectedFileName
-                ? <span className="text-blue-700 opacity-100">{expectedFileName}</span>
-                : 'expectedResults.json'}
-            </p>
-            {hasExpected && (
-              <span className="text-[9px] font-mono text-blue-600">
-                {[...expectedResults!.values()].reduce((s, m) => s + m.size, 0)} expected results loaded
-              </span>
-            )}
-          </button>
-          {expectedError && (
-            <div className="flex items-center gap-2 p-2 border border-red-400 bg-red-50 text-red-700 text-[10px] font-mono">
-              <AlertTriangle size={12} className="shrink-0" />
-              {expectedError}
-              <button type="button" onClick={() => setExpectedError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+              {/* Fallback variant */}
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold opacity-40 tracking-wider flex items-center gap-1">
+                  Fallback Variant
+                  <Tip text="Auto-detected from public key length (1312B→44, 1952B→65, 2592B→87). This selector is only used if detection fails." />
+                </label>
+                <div className="flex gap-2">
+                  {VARIANTS.map(v => (
+                    <button key={v} type="button" onClick={() => setActiveVariant(v)}
+                      className={cn('px-3 py-1 text-[10px] font-mono border transition-colors',
+                        activeVariant === v ? 'bg-[#141414] text-[#E4E3E0] border-[#141414]' : 'border-[#141414]/30 hover:border-[#141414]/60')}>
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Expected results loader */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold opacity-50 tracking-wider">
+                  <FileCheck2 size={12} />
+                  Expected Results
+                  <span className="text-[9px] font-mono normal-case opacity-60">(optional)</span>
+                  <Tip text="Load the companion expectedResults.json file from NIST ACVP-Server. Each test case has a testPassed field that will be compared against our result." />
+                </div>
+                <input ref={expectedInputRef} type="file" accept=".json" className="hidden" onChange={handleExpectedInputChange} />
+                <button
+                  type="button"
+                  onClick={() => expectedInputRef.current?.click()}
+                  className={cn(
+                    'w-full border-2 border-dashed p-5 flex flex-col items-center gap-2 transition-colors cursor-pointer',
+                    hasExpected
+                      ? 'border-blue-400 bg-blue-50'
+                      : 'border-[#141414]/20 hover:border-[#141414]/40',
+                  )}
+                >
+                  <FileCheck2 className={cn('w-5 h-5', hasExpected ? 'text-blue-500' : 'opacity-20')} />
+                  <p className="text-xs font-serif italic opacity-60 text-center">
+                    {expectedFileName
+                      ? <span className="text-blue-700 opacity-100">{expectedFileName}</span>
+                      : 'expectedResults.json'}
+                  </p>
+                  {hasExpected && (
+                    <span className="text-[9px] font-mono text-blue-600">
+                      {[...expectedResults!.values()].reduce((s, m) => s + m.size, 0)} expected results loaded · click to replace
+                    </span>
+                  )}
+                </button>
+                {expectedError && (
+                  <div className="flex items-center gap-2 p-2 border border-red-400 bg-red-50 text-red-700 text-[10px] font-mono">
+                    <AlertTriangle size={12} className="shrink-0" />
+                    {expectedError}
+                    <button type="button" onClick={() => setExpectedError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* KAT Prompt drop zone */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold opacity-50 tracking-wider">
+          <FileText size={12} /> KAT Prompt File
+          <Tip text="The internalProjection.json (or .rsp) file containing test vectors with pk/message/signature fields." />
         </div>
+        <input ref={fileInputRef} type="file" accept=".rsp,.txt,.json" className="hidden" onChange={handleInputChange} />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={() => setDragActive(false)}
+          className={cn(
+            'w-full border-2 border-dashed p-8 flex flex-col items-center gap-2 transition-colors cursor-pointer',
+            dragActive ? 'border-[#141414] bg-[#141414]/5' : 'border-[#141414]/30 hover:border-[#141414]/60',
+          )}
+        >
+          {running ? <RefreshCw className="w-6 h-6 animate-spin opacity-40" /> : <Upload className="w-6 h-6 opacity-30" />}
+          <p className="text-xs font-serif italic opacity-60 text-center">
+            {running ? 'Running…' : fileName ? fileName : 'internalProjection.json or .rsp'}
+          </p>
+          {fileName && !running && (
+            <span className="text-[9px] font-mono opacity-40">Click to reload</span>
+          )}
+        </button>
+        {parseError && (
+          <div className="flex items-center gap-2 p-2 border border-red-400 bg-red-50 text-red-700 text-[10px] font-mono">
+            <AlertTriangle size={12} className="shrink-0" />
+            {parseError}
+            <button type="button" onClick={() => setParseError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -657,7 +782,7 @@ export default function KatTab({ variant, onVariantChange }: KatTabProps) {
                 ? <div className="p-6 text-center text-xs opacity-40 font-mono">
                     {filterMode !== 'all' ? 'No vectors match this filter.' : 'No vectors to display.'}
                   </div>
-                : displayVectors.map(v => <VectorRow key={`${v.tgId ?? 0}-${v.tcId}`} v={v} />)
+                : displayVectors.map(v => <VectorRow key={`${v.tgId ?? 0}-${v.tcId}`} v={v} variant={activeVariant} onSendToInspector={onSendToInspector} />)
               }
             </div>
 
