@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 test_output.txt 
+tree.txt

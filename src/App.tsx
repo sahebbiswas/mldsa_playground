@@ -48,6 +48,7 @@ import {
 } from './services/mldsa';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
+import KatTab from './components/KatTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -148,7 +149,7 @@ export default function App() {
   const inspectMessageBinRef = useRef<HTMLInputElement>(null);
 
   // ── Generate / Sign tab state ────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509'>('inspect');
+  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509' | 'kat'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
   const [isGenMessageBinary, setIsGenMessageBinary] = useState(false);
@@ -649,6 +650,7 @@ if __name__ == "__main__":
             ['inspect', <Search size={18} />, 'Inspect Signature'],
             ['x509', <FileCheck2 size={18} />, 'X.509 Certificates'],
             ['generate', <Key size={18} />, 'Key & Sign Tools'],
+            ['kat', <Cpu size={18} />, 'KAT Validator'],
             ['python', <Terminal size={18} />, 'Python Reference'],
           ] as const).map(([tab, icon, label]) => (
             <button
@@ -1434,6 +1436,11 @@ if __name__ == "__main__":
                   </motion.div>
                 )}
               </motion.div>
+            ) : activeTab === 'kat' ? (
+              <KatTab
+                variant={variant}
+                onVariantChange={setVariant}
+              />
             ) : (
               <motion.div
                 key="python"
@@ -1484,9 +1491,9 @@ if __name__ == "__main__":
             <span className="font-serif italic text-lg">ML-DSA Inspector</span>
           </div>
           <div className="flex gap-8 text-[10px] uppercase tracking-widest font-bold opacity-60">
-            <a href="#" className="hover:opacity-100">FIPS 204 Standard</a>
-            <a href="#" className="hover:opacity-100">NIST PQC</a>
-            <a href="#" className="hover:opacity-100">Documentation</a>
+            <a href="https://doi.org/10.6028/NIST.FIPS.204" target="_blank" rel="noreferrer" className="hover:opacity-100">FIPS 204 Standard</a>
+            <a href="https://csrc.nist.gov/projects/post-quantum-cryptography" target="_blank" rel="noreferrer" className="hover:opacity-100">NIST PQC</a>
+            <a href="https://csrc.nist.gov/projects/post-quantum-cryptography/post-quantum-cryptography-standardization/example-files" target="_blank" rel="noreferrer" className="hover:opacity-100">KAT Files</a>
             <a href="https://github.com/sahebbiswas/mldsa_playground" target="_blank" rel="noreferrer" className="hover:opacity-100 text-violet-300">GitHub (sahebbiswas/mldsa_playground)</a>
           </div>
           <p className="text-[10px] opacity-40 font-mono">&copy; 2026 SAHEB BISWAS. ALL RIGHTS RESERVED.</p>
