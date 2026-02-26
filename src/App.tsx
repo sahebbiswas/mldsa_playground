@@ -446,7 +446,7 @@ export default function App() {
     setPublicKey(payload.publicKey);
     setSignature(payload.signature);
     setMessage(payload.message);
-    setIsMessageBinary(false);
+    setIsMessageBinary(true); // KAT messages are always hex-encoded bytes
     setInspectMode(payload.mode);
     setInspectContext(payload.context);
     setInspectHashAlg(payload.hashAlg);

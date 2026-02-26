@@ -19,8 +19,9 @@
  */
 
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
-import { sha256, sha384, sha512 } from '@noble/hashes/sha2.js';
-import { MLDSAVariant, hexToUint8Array, HASH_FNS } from './mldsa';
+import { sha224, sha256, sha384, sha512, sha512_224, sha512_256 } from '@noble/hashes/sha2.js';
+import { sha3_224, sha3_256, sha3_384, sha3_512, shake128, shake256 } from '@noble/hashes/sha3.js';
+import { MLDSAVariant, hexToUint8Array } from './mldsa';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -92,19 +93,48 @@ export const PK_BYTES: Record<MLDSAVariant, number> = {
   'ML-DSA-87': 2592,
 };
 
-// ─── ACVP hashAlg → noble HASH_FNS key ───────────────────────────────────────
+// ─── ACVP hashAlg → noble hash function ──────────────────────────────────────
 
 /**
- * Map ACVP hashAlg strings to the app's HashAlg type used by HASH_FNS.
- * FIPS 204 HashML-DSA supports SHA2-256, SHA2-384, SHA2-512 (and SHA3 variants
- * but noble's current HASH_FNS only covers SHA-2; SHA-3 vectors will be skipped).
+ * Map ACVP hashAlg strings to a { fn, label } pair for noble's prehash() API.
+ *
+ * noble's prehash() requires a function with an `.oid` property. SHA3/SHAKE
+ * functions from @noble/hashes/sha3.js already have OIDs attached internally.
+ * SHAKE variants are XOFs — wrapped with a fixed dkLen per FIPS 204:
+ *   SHAKE-128 → 32 bytes, SHAKE-256 → 64 bytes.
+ *
+ * Returns null only for completely unrecognised strings.
  */
 function resolveHashFn(acvpHashAlg: string): { fn: any; label: string } | null {
-  const normalised = acvpHashAlg.toUpperCase().replace(/[-_\s]/g, '');
-  if (normalised === 'SHA2256' || normalised === 'SHA256') return { fn: HASH_FNS['SHA-256'], label: 'SHA2-256' };
-  if (normalised === 'SHA2384' || normalised === 'SHA384') return { fn: HASH_FNS['SHA-384'], label: 'SHA2-384' };
-  if (normalised === 'SHA2512' || normalised === 'SHA512') return { fn: HASH_FNS['SHA-512'], label: 'SHA2-512' };
-  return null; // SHA3 variants or unknown — skip
+  const n = acvpHashAlg.toUpperCase().replace(/[-_/\s]/g, '');
+
+  // ── SHA-2 ──────────────────────────────────────────────────────────────────
+  if (n === 'SHA2224' || n === 'SHA224')        return { fn: sha224,      label: 'SHA2-224' };
+  if (n === 'SHA2256' || n === 'SHA256')        return { fn: sha256,      label: 'SHA2-256' };
+  if (n === 'SHA2384' || n === 'SHA384')        return { fn: sha384,      label: 'SHA2-384' };
+  if (n === 'SHA2512' || n === 'SHA512')        return { fn: sha512,      label: 'SHA2-512' };
+  if (n === 'SHA2512224' || n === 'SHA512224')  return { fn: sha512_224,  label: 'SHA2-512/224' };
+  if (n === 'SHA2512256' || n === 'SHA512256')  return { fn: sha512_256,  label: 'SHA2-512/256' };
+
+  // ── SHA-3 (fixed output, OIDs attached by noble) ──────────────────────────
+  if (n === 'SHA3224') return { fn: sha3_224, label: 'SHA3-224' };
+  if (n === 'SHA3256') return { fn: sha3_256, label: 'SHA3-256' };
+  if (n === 'SHA3384') return { fn: sha3_384, label: 'SHA3-384' };
+  if (n === 'SHA3512') return { fn: sha3_512, label: 'SHA3-512' };
+
+  // ── SHAKE (XOF — wrap with fixed output length, OIDs attached by noble) ───
+  if (n === 'SHAKE128') {
+    const fn = (msg: Uint8Array) => shake128(msg, { dkLen: 32 });
+    fn.oid = (shake128 as any).oid;
+    return { fn, label: 'SHAKE-128' };
+  }
+  if (n === 'SHAKE256') {
+    const fn = (msg: Uint8Array) => shake256(msg, { dkLen: 64 });
+    fn.oid = (shake256 as any).oid;
+    return { fn, label: 'SHAKE-256' };
+  }
+
+  return null; // completely unrecognised
 }
 
 // ─── Noble instance ───────────────────────────────────────────────────────────
@@ -263,7 +293,15 @@ export function parseSimpleJson(content: string): { vectors: KatVector[]; inferr
     hashAlg: v.hashAlg,
   }));
 
-  return { vectors, inferredVariant: parsed?.variant as MLDSAVariant | undefined };
+  const ALLOWED_VARIANTS: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+  const rawVariant = parsed?.variant;
+  if (rawVariant !== undefined && !ALLOWED_VARIANTS.includes(rawVariant)) {
+    throw new Error(
+      `Invalid variant "${rawVariant}" in JSON. Expected one of: ${ALLOWED_VARIANTS.join(', ')}.`,
+    );
+  }
+
+  return { vectors, inferredVariant: rawVariant as MLDSAVariant | undefined };
 }
 
 // ─── Master parser ────────────────────────────────────────────────────────────

@@ -370,7 +370,7 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
 function SummaryBar({ result }: { result: KatRunResult }) {
   const runnable = result.total - result.skipped;
   const pct = runnable > 0 ? Math.round((result.passed / runnable) * 100) : 0;
-  const allPass = result.failed === 0;
+  const allPass = runnable > 0 && result.failed === 0;
   const hasMismatches = result.expectedMismatches > 0;
 
   return (
@@ -400,7 +400,7 @@ function SummaryBar({ result }: { result: KatRunResult }) {
             {result.skipped > 0 && (
               <span className="flex items-center gap-1">
                 {result.skipped} skipped
-                <Tip text="Vectors skipped because their hash algorithm (e.g. SHA3) is not supported by this tool, or an exception was thrown." />
+                <Tip text="Vectors skipped because their hash algorithm is unrecognised (not a FIPS 204 hash), or an exception was thrown." />
               </span>
             )}
             {result.expectedMismatches > 0 && (
@@ -782,7 +782,7 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
                 ? <div className="p-6 text-center text-xs opacity-40 font-mono">
                     {filterMode !== 'all' ? 'No vectors match this filter.' : 'No vectors to display.'}
                   </div>
-                : displayVectors.map(v => <VectorRow key={`${v.tgId ?? 0}-${v.tcId}`} v={v} variant={activeVariant} onSendToInspector={onSendToInspector} />)
+                : displayVectors.map(v => <VectorRow key={`${v.tgId ?? 0}-${v.tcId}`} v={v} variant={result.variant} onSendToInspector={onSendToInspector} />)
               }
             </div>
 
