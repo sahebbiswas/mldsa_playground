@@ -137,6 +137,24 @@ function resolveHashFn(acvpHashAlg: string): { fn: any; label: string } | null {
   return null; // completely unrecognised
 }
 
+// ─── Strict hex decoder ───────────────────────────────────────────────────────
+
+/**
+ * Decode a hex string to Uint8Array, throwing on any malformed input.
+ * Unlike hexToUint8Array (which silently strips bad chars), this rejects
+ * odd-length strings and any non-hex character so malformed KAT vectors
+ * are detected immediately rather than being silently normalised.
+ */
+function strictHex(hex: string, fieldName: string): Uint8Array {
+  if (hex.length % 2 !== 0) {
+    throw new Error(`${fieldName}: odd-length hex string (${hex.length} chars)`);
+  }
+  if (hex.length > 0 && !/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error(`${fieldName}: contains non-hex characters`);
+  }
+  return hexToUint8Array(hex);
+}
+
 // ─── Noble instance ───────────────────────────────────────────────────────────
 
 function getInstance(variant: MLDSAVariant) {
@@ -195,11 +213,28 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
 
     for (const tc of group.tests) {
       const isExternalMu = group.externalMu === true && !!tc.mu;
+
+      // Validate required fields — reject early with context rather than silently defaulting
+      if (tc.tcId === undefined || tc.tcId === null) {
+        throw new Error(`tgId=${group.tgId}: test case is missing tcId`);
+      }
+      if (!tc.pk) {
+        throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "pk"`);
+      }
+      if (isExternalMu) {
+        if (!tc.mu) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: externalMu=true but "mu" field is missing`);
+      } else {
+        if (!tc.message) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "message"`);
+      }
+      if (!tc.signature) {
+        throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "signature"`);
+      }
+
       vectors.push({
         tcId: tc.tcId,
         tgId: group.tgId,
-        pk: tc.pk ?? '',
-        message: isExternalMu ? (tc.mu ?? '') : (tc.message ?? ''),
+        pk: tc.pk,
+        message: isExternalMu ? tc.mu! : tc.message!,
         signature: tc.signature,
         context: tc.context ?? group.context,
         isExternalMu,
@@ -355,8 +390,8 @@ export async function runKatVectors(
 
   for (const v of slice) {
     try {
-      const pkBytes = hexToUint8Array(v.pk);
-      const msgBytes = hexToUint8Array(v.message);
+      const pkBytes = strictHex(v.pk, 'pk');
+      const msgBytes = strictHex(v.message, 'message');
       let verifyOk = false;
       let modeLabel = 'Pure';
       let note = '';
@@ -372,7 +407,7 @@ export async function runKatVectors(
       if (v._format === '__legacy_sm__') {
         modeLabel = 'Legacy .rsp';
         modesSet.add(modeLabel);
-        const smBytes = hexToUint8Array(v.signature);
+        const smBytes = strictHex(v.signature, 'signature (SM)');
         const sigFromSm = smBytes.slice(0, sigLen);
         try { verifyOk = instance.verify(sigFromSm, msgBytes, pkBytes); } catch { verifyOk = false; }
         note = verifyOk
@@ -383,14 +418,16 @@ export async function runKatVectors(
       } else if (v.isExternalMu) {
         modeLabel = 'External μ';
         modesSet.add(modeLabel);
-        const sigBytesArr = hexToUint8Array(v.signature);
+        const sigBytesArr = strictHex(v.signature, 'signature');
         try {
           verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes, { externalMu: true });
         } catch { verifyOk = false; }
         note = verifyOk ? 'μ-based internal verify passed' : 'μ-based internal verify failed';
 
       // ── HashML-DSA (preHash mode) ──────────────────────────────────────
-      } else if (v.preHash && v.preHash.toLowerCase() !== 'pure') {
+      // preHash="none" means pure ML-DSA even when the field is present.
+      // Only enter this branch when preHash is a real hash specifier.
+      } else if (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) {
         const resolved = v.hashAlg ? resolveHashFn(v.hashAlg) : null;
         if (!resolved) {
           modeLabel = `PreHash (${v.hashAlg ?? 'unknown'})`;
@@ -401,8 +438,8 @@ export async function runKatVectors(
         } else {
           modeLabel = `HashML-DSA (${resolved.label})`;
           modesSet.add(modeLabel);
-          const sigBytesArr = hexToUint8Array(v.signature);
-          const ctxBytes = v.context ? hexToUint8Array(v.context) : undefined;
+          const sigBytesArr = strictHex(v.signature, 'signature');
+          const ctxBytes = v.context ? strictHex(v.context, 'context') : undefined;
           try {
             // Use noble's prehash interface: instance.prehash(hashFn).verify(sig, msg, pk, { context? })
             verifyOk = (instance as any).prehash(resolved.fn).verify(
@@ -421,8 +458,8 @@ export async function runKatVectors(
       } else {
         modeLabel = v.context ? 'Pure + Context' : 'Pure';
         modesSet.add(modeLabel);
-        const sigBytesArr = hexToUint8Array(v.signature);
-        const ctxBytes = v.context ? hexToUint8Array(v.context) : undefined;
+        const sigBytesArr = strictHex(v.signature, 'signature');
+        const ctxBytes = v.context ? strictHex(v.context, 'context') : undefined;
         try {
           verifyOk = instance.verify(sigBytesArr, msgBytes, pkBytes, {
             context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined,

@@ -151,12 +151,13 @@ const SIG_PREVIEW_LEN = 64;
 
 // ─── TinyBtn — matches App.tsx ActionRow style ────────────────────────────────
 
-function TinyBtn({ onClick, children, className }: {
-  onClick: () => void; children: React.ReactNode; className?: string;
+function TinyBtn({ onClick, children, className, title }: {
+  onClick: () => void; children: React.ReactNode; className?: string; title?: string;
 }) {
   return (
     <button
       type="button"
+      title={title}
       onClick={onClick}
       className={cn('text-[10px] flex items-center gap-1 hover:underline', className)}
     >
@@ -176,7 +177,7 @@ function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendT
   }
 
   // Map ACVP preHash+hashAlg → Inspector SignMode + HashAlg
-  const isHashMode = v.preHash && v.preHash.toLowerCase() !== 'pure' && !v.isExternalMu;
+  const isHashMode = v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase()) && !v.isExternalMu;
   const mode: SignMode = isHashMode ? 'hash-ml-dsa' : 'pure';
 
   // Map ACVP hashAlg → Inspector HashAlg. Only SHA-2 variants are supported by
@@ -273,6 +274,10 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
           <Tip text={getModeTooltip(v.modeLabel)} />
         </span>
 
+        <span className="font-mono text-[9px] border border-[#141414]/20 px-1.5 py-0.5 text-[#141414]/50 shrink-0">
+          {variant}
+        </span>
+
         {hasExpected && (
           <span className="flex items-center gap-1">
             <ExpectedPill expected={v.expectedPassed!} matches={v.matchesExpected!} />
@@ -340,17 +345,28 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
               )}
 
               {/* Send to Inspector */}
-              <div className="flex items-center gap-3 pt-1 border-t border-[#141414]/10">
-                <TinyBtn
-                  onClick={() => onSendToInspector(buildInspectorPayload(v, variant))}
-                  className="text-blue-600"
-                >
-                  <Search size={10} /> Send to Inspector
-                </TinyBtn>
-                <span className="text-[9px] font-mono opacity-30">
-                  Loads this vector's pk, signature, and message into the Inspector tab
-                </span>
-              </div>
+              {(() => {
+                const payload = buildInspectorPayload(v, variant);
+                const unsupportedHash = payload.mode === 'hash-ml-dsa' && !payload.hashAlg;
+                return (
+                  <div className="flex items-center gap-3 pt-1 border-t border-[#141414]/10">
+                    <TinyBtn
+                      onClick={() => !unsupportedHash && onSendToInspector(payload)}
+                      className={unsupportedHash ? 'opacity-30 cursor-not-allowed text-blue-600' : 'text-blue-600'}
+                      title={unsupportedHash
+                        ? `Inspector only supports SHA2-256/384/512 for HashML-DSA. This vector uses ${v.hashAlg ?? 'an unsupported hash'} which cannot be re-verified there.`
+                        : undefined}
+                    >
+                      <Search size={10} /> Send to Inspector
+                    </TinyBtn>
+                    <span className="text-[9px] font-mono opacity-30">
+                      {unsupportedHash
+                        ? `${v.hashAlg ?? 'Hash algorithm'} not supported by Inspector`
+                        : 'Loads this vector\'s pk, signature, and message into the Inspector tab'}
+                    </span>
+                  </div>
+                );
+              })()}
             </div>
           </motion.div>
         )}

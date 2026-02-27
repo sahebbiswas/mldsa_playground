@@ -1469,13 +1469,7 @@ if __name__ == "__main__":
                   </motion.div>
                 )}
               </motion.div>
-            ) : activeTab === 'kat' ? (
-              <KatTab
-                variant={variant}
-                onVariantChange={setVariant}
-                onSendToInspector={sendKatToInspector}
-              />
-            ) : (
+            ) : activeTab === 'kat' ? null : (
               <motion.div
                 key="python"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
@@ -1514,6 +1508,15 @@ if __name__ == "__main__":
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* KAT Validator — always mounted so run results survive tab switches */}
+          <div className={activeTab === 'kat' ? undefined : 'hidden'}>
+            <KatTab
+              variant={variant}
+              onVariantChange={setVariant}
+              onSendToInspector={sendKatToInspector}
+            />
+          </div>
         </div>
       </main>
 
