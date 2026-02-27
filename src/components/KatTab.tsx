@@ -48,7 +48,8 @@ export interface SendToInspectorPayload {
   signature: string;
   message: string;
   mode: SignMode;
-  hashAlg: HashAlg;
+  /** Only defined for SHA-2 HashML-DSA vectors the inspector can re-verify. */
+  hashAlg?: HashAlg;
   /** Raw hex-encoded context bytes from the ACVP vector (may contain non-UTF8 bytes). */
   contextRawHex: string;
   showAdvanced: boolean;
@@ -178,12 +179,16 @@ function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendT
   const isHashMode = v.preHash && v.preHash.toLowerCase() !== 'pure' && !v.isExternalMu;
   const mode: SignMode = isHashMode ? 'hash-ml-dsa' : 'pure';
 
-  // Map ACVP hashAlg string (e.g. "SHA2-256") → Inspector HashAlg (e.g. "SHA-256")
-  let hashAlg: HashAlg = 'SHA-256';
+  // Map ACVP hashAlg → Inspector HashAlg. Only SHA-2 variants are supported by
+  // the inspector's mldsa.ts HASH_FNS. SHA3/SHAKE vectors can't be re-verified
+  // in the inspector so hashAlg is left undefined for them.
+  let hashAlg: HashAlg | undefined;
   if (v.hashAlg) {
     const n = v.hashAlg.toUpperCase().replace(/[-_/\s]/g, '');
-    if (n === 'SHA2384' || n === 'SHA384') hashAlg = 'SHA-384';
+    if (n === 'SHA2256' || n === 'SHA256') hashAlg = 'SHA-256';
+    else if (n === 'SHA2384' || n === 'SHA384') hashAlg = 'SHA-384';
     else if (n === 'SHA2512' || n === 'SHA512') hashAlg = 'SHA-512';
+    // SHA3/SHAKE/SHA2-224/512-t: not supported by inspector — left undefined
   }
 
   // Pass context as raw hex — App.tsx will route it through contextRawHex in
@@ -442,6 +447,7 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // Keep last parsed vectors so we can re-run when expectedResults are loaded
   const [lastVectors, setLastVectors] = useState<ReturnType<typeof parseKatFile> | null>(null);
+  const [lastRunVariant, setLastRunVariant] = useState<MLDSAVariant | null>(null);
 
   const runVectors = async (
     parsed: ReturnType<typeof parseKatFile>,
@@ -473,6 +479,7 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
       setActiveVariant(chosen);
       onVariantChange(chosen);
       setLastVectors(parsed);
+      setLastRunVariant(chosen);
       await runVectors(parsed, chosen, expectedResults);
     } catch (err: any) {
       setParseError(err?.message ?? 'Failed to parse file.');
@@ -490,7 +497,7 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
       if (map.size === 0) throw new Error('No test results found. Check the file format.');
       setExpectedResults(map);
       // Re-run existing vectors with the new expected results
-      if (lastVectors) await runVectors(lastVectors, activeVariant, map);
+      if (lastVectors) await runVectors(lastVectors, lastRunVariant ?? activeVariant, map);
     } catch (err: any) {
       setExpectedError(err?.message ?? 'Failed to parse expectedResults file.');
     }

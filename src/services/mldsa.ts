@@ -136,6 +136,11 @@ export const inspectSignature = async (
     const pk = hexToUint8Array(publicKeyHex);
     const sig = hexToUint8Array(signatureHex);
     const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+    if (opts.contextRawHex !== undefined && opts.contextRawHex !== '') {
+      if (opts.contextRawHex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(opts.contextRawHex)) {
+        throw new Error(`contextRawHex is malformed: must be a non-empty even-length hex string, got "${opts.contextRawHex.slice(0, 20)}…"`);
+      }
+    }
     const contextBytes = opts.contextRawHex
       ? hexToUint8Array(opts.contextRawHex)
       : new TextEncoder().encode(opts.contextText);
@@ -270,6 +275,11 @@ export const signMessage = (
   const instance = getMLDSAInstance(variant);
   const sk = hexToUint8Array(privateKeyHex);
   const msg = typeof message === 'string' ? new TextEncoder().encode(message) : message;
+  if (opts.contextRawHex !== undefined && opts.contextRawHex !== '') {
+    if (opts.contextRawHex.length % 2 !== 0 || !/^[0-9a-fA-F]+$/.test(opts.contextRawHex)) {
+      throw new Error(`contextRawHex is malformed: must be a non-empty even-length hex string, got "${opts.contextRawHex.slice(0, 20)}…"`);
+    }
+  }
   const contextBytes = opts.contextRawHex
     ? hexToUint8Array(opts.contextRawHex)
     : new TextEncoder().encode(opts.contextText);

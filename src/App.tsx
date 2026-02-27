@@ -454,7 +454,7 @@ export default function App() {
     setInspectMode(payload.mode);
     setInspectContext(''); // raw hex context is carried separately
     setInspectContextRawHex(payload.contextRawHex || undefined);
-    setInspectHashAlg(payload.hashAlg);
+    if (payload.hashAlg) setInspectHashAlg(payload.hashAlg);
     if (payload.showAdvanced) setShowAdvancedVerify(true);
     setInspectLegacy(false);
     setActiveTab('inspect');
@@ -668,12 +668,12 @@ if __name__ == "__main__":
         {/* Sidebar Navigation */}
         <div className="lg:col-span-3 space-y-2">
           {([
-            ['inspect', <Search size={18} />, 'Inspect Signature'],
-            ['x509', <FileCheck2 size={18} />, 'X.509 Certificates'],
-            ['generate', <Key size={18} />, 'Key & Sign Tools'],
-            ['kat', <Cpu size={18} />, 'KAT Validator'],
-            ['python', <Terminal size={18} />, 'Python Reference'],
-          ] as const).map(([tab, icon, label]) => (
+            ['inspect', Search, 'Inspect Signature'],
+            ['x509', FileCheck2, 'X.509 Certificates'],
+            ['generate', Key, 'Key & Sign Tools'],
+            ['kat', Cpu, 'KAT Validator'],
+            ['python', Terminal, 'Python Reference'],
+          ] as const).map(([tab, Icon, label]) => (
             <button
               key={tab}
               title={`Navigate to ${label}`}
@@ -683,7 +683,7 @@ if __name__ == "__main__":
                 activeTab === tab ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414]/5',
               )}
             >
-              {icon}
+              <Icon size={18} />
               <span className="font-serif italic">{label}</span>
             </button>
           ))}

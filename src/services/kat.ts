@@ -156,6 +156,7 @@ interface AcvpTestCase {
   mu?: string;
   signature: string;
   context?: string;
+  hashAlg?: string;  // per ACVP spec §8.3.2: test-case level for sigVer preHash
 }
 
 interface AcvpTestGroup {
@@ -202,7 +203,7 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
         signature: tc.signature,
         context: tc.context ?? group.context,
         isExternalMu,
-        hashAlg: group.hashAlg,
+        hashAlg: tc.hashAlg ?? group.hashAlg,
         signatureInterface: group.signatureInterface,
         preHash: group.preHash,
       });
