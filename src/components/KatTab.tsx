@@ -168,7 +168,8 @@ function TinyBtn({ onClick, children, className, title }: {
 
 // ─── Build inspector payload from a KAT vector ────────────────────────────────
 
-function buildInspectorPayload(v: KatVectorResult, variant: MLDSAVariant): SendToInspectorPayload {
+function buildInspectorPayload(v: KatVectorResult, fallbackVariant: MLDSAVariant): SendToInspectorPayload {
+  const variant = v.parameterSet ?? fallbackVariant;
   // For legacy .rsp: the stored signature is the raw SM (sig ‖ msg). Extract sig.
   let sigHex = v.signature;
   if (v._format === '__legacy_sm__') {

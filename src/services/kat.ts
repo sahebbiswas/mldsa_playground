@@ -44,6 +44,9 @@ export interface KatVector {
   signatureInterface?: string;
   /** 'pure' | 'preHash' from ACVP testGroup (external interface only) */
   preHash?: string;
+  /** ML-DSA variant for this vector, parsed directly from ACVP parameterSet.
+   *  Present on ACVP vectors; absent on legacy .rsp / simple JSON (use run-level variant). */
+  parameterSet?: MLDSAVariant;
   /** Internal tag: '__legacy_sm__' for .rsp format vectors */
   _format?: string;
 }
@@ -205,11 +208,16 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
   let inferredVariant: MLDSAVariant | undefined;
 
   for (const group of vectorSet.testGroups) {
-    if (group.parameterSet && !inferredVariant) {
-      if (group.parameterSet.includes('44')) inferredVariant = 'ML-DSA-44';
-      else if (group.parameterSet.includes('65')) inferredVariant = 'ML-DSA-65';
-      else if (group.parameterSet.includes('87')) inferredVariant = 'ML-DSA-87';
+    // Resolve this group's variant from parameterSet
+    let groupVariant: MLDSAVariant | undefined;
+    if (group.parameterSet) {
+      if (group.parameterSet.includes('44')) groupVariant = 'ML-DSA-44';
+      else if (group.parameterSet.includes('65')) groupVariant = 'ML-DSA-65';
+      else if (group.parameterSet.includes('87')) groupVariant = 'ML-DSA-87';
     }
+    // inferredVariant stays as the first group's variant — used only as the
+    // UI fallback selector default, not as the run variant for any vector.
+    if (groupVariant && !inferredVariant) inferredVariant = groupVariant;
 
     for (const tc of group.tests) {
       const isExternalMu = group.externalMu === true && !!tc.mu;
@@ -241,6 +249,7 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
         hashAlg: tc.hashAlg ?? group.hashAlg,
         signatureInterface: group.signatureInterface,
         preHash: group.preHash,
+        parameterSet: groupVariant,
       });
     }
   }
@@ -380,8 +389,6 @@ export async function runKatVectors(
   maxVectors = 100,
   expectedResults?: ExpectedResultsMap,
 ): Promise<KatRunResult> {
-  const instance = getInstance(variant);
-  const sigLen = SIG_BYTES[variant];
   const slice = vectors.slice(0, maxVectors);
   const results: KatVectorResult[] = [];
   const modesSet = new Set<string>();
@@ -389,6 +396,11 @@ export async function runKatVectors(
   let skipped = 0;
 
   for (const v of slice) {
+    // Use the per-vector parameterSet when available (ACVP multi-group files),
+    // falling back to the run-level variant for legacy .rsp / simple JSON.
+    const vecVariant: MLDSAVariant = v.parameterSet ?? variant;
+    const instance = getInstance(vecVariant);
+    const sigLen = SIG_BYTES[vecVariant];
     try {
       const pkBytes = strictHex(v.pk, 'pk');
       const msgBytes = strictHex(v.message, 'message');
