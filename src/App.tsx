@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Shield,
@@ -46,6 +46,8 @@ import {
   SigningOptions,
   InspectionResult,
 } from './services/mldsa';
+import SignatureAnalysisPanel from './components/SignatureAnalysisPanel';
+import KeyAnalysisPanel from './components/KeyAnalysisPanel';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
 import KatTab, { type SendToInspectorPayload } from './components/KatTab';
@@ -144,6 +146,20 @@ export default function App() {
   const [isMessageBinary, setIsMessageBinary] = useState(false);
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
+
+  // Derived values used by the analysis panels — kept in sync with what handleInspect uses
+  const inspectMessageBytes = useMemo<Uint8Array>(() => {
+    if (!message) return new Uint8Array();
+    return isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message);
+  }, [message, isMessageBinary]);
+
+  const inspectOpts = useMemo<SigningOptions>(() => ({
+    mode: inspectMode,
+    contextText: inspectContext,
+    contextRawHex: inspectContextRawHex,
+    hashAlg: inspectHashAlg,
+    deterministic: false,
+  }), [inspectMode, inspectContext, inspectContextRawHex, inspectHashAlg]);
 
   // Inspect binary import refs
   const inspectPubBinRef = useRef<HTMLInputElement>(null);
@@ -755,6 +771,10 @@ if __name__ == "__main__":
                       placeholder="Enter hex-encoded public key..."
                       className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                     />
+                    {/* Key Analysis Panel — visible whenever a public key is present */}
+                    {publicKey && publicKey.replace(/[^0-9a-fA-F]/g, '').length >= 64 && (
+                      <KeyAnalysisPanel variant={variant} publicKeyHex={publicKey} />
+                    )}
                   </div>
 
                   {/* Signature */}
@@ -1082,6 +1102,15 @@ if __name__ == "__main__":
                         </div>
                       </div>
                     )}
+
+                    {/* Signature Analysis Panel — structural decoder, norm checker, malleability tester */}
+                    <SignatureAnalysisPanel
+                      variant={variant}
+                      publicKey={publicKey}
+                      signatureHex={signature}
+                      message={inspectMessageBytes}
+                      opts={inspectOpts}
+                    />
                   </motion.div>
                 )}
               </motion.div>
