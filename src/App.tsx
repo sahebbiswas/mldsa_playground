@@ -48,6 +48,7 @@ import {
 } from './services/mldsa';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
+import KatTab, { type SendToInspectorPayload } from './components/KatTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -136,6 +137,8 @@ export default function App() {
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectMode, setInspectMode] = useState<SignMode>('pure');
   const [inspectContext, setInspectContext] = useState('');
+  /** Raw hex context bytes from a KAT vector — takes priority over inspectContext in handleInspect. */
+  const [inspectContextRawHex, setInspectContextRawHex] = useState<string | undefined>(undefined);
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
   const [inspectLegacy, setInspectLegacy] = useState(false);
   const [isMessageBinary, setIsMessageBinary] = useState(false);
@@ -148,7 +151,7 @@ export default function App() {
   const inspectMessageBinRef = useRef<HTMLInputElement>(null);
 
   // ── Generate / Sign tab state ────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509'>('inspect');
+  const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509' | 'kat'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
   const [isGenMessageBinary, setIsGenMessageBinary] = useState(false);
@@ -183,6 +186,7 @@ export default function App() {
     const opts: SigningOptions = {
       mode: inspectMode,
       contextText: inspectContext,
+      contextRawHex: inspectContextRawHex,
       hashAlg: inspectHashAlg,
       checkLegacyMode: inspectLegacy,
       // Verification is inherently deterministic; we thread this flag only for
@@ -432,8 +436,26 @@ export default function App() {
     setIsMessageBinary(isGenMessageBinary);
     setInspectMode(signMode);
     setInspectContext(signContext);
+    setInspectContextRawHex(undefined); // normal flow uses UTF-8 text context
     setInspectHashAlg(signHashAlg);
     if (signMode === 'hash-ml-dsa' || signContext) setShowAdvancedVerify(true);
+    setInspectLegacy(false);
+    setActiveTab('inspect');
+    setResult(null);
+  };
+
+  // "Send to Inspector" from a KAT vector row
+  const sendKatToInspector = (payload: SendToInspectorPayload) => {
+    setVariant(payload.variant);
+    setPublicKey(payload.publicKey);
+    setSignature(payload.signature);
+    setMessage(payload.message);
+    setIsMessageBinary(true); // KAT messages are always hex-encoded bytes
+    setInspectMode(payload.mode);
+    setInspectContext(''); // raw hex context is carried separately
+    setInspectContextRawHex(payload.contextRawHex || undefined);
+    if (payload.hashAlg) setInspectHashAlg(payload.hashAlg);
+    if (payload.showAdvanced) setShowAdvancedVerify(true);
     setInspectLegacy(false);
     setActiveTab('inspect');
     setResult(null);
@@ -646,11 +668,12 @@ if __name__ == "__main__":
         {/* Sidebar Navigation */}
         <div className="lg:col-span-3 space-y-2">
           {([
-            ['inspect', <Search size={18} />, 'Inspect Signature'],
-            ['x509', <FileCheck2 size={18} />, 'X.509 Certificates'],
-            ['generate', <Key size={18} />, 'Key & Sign Tools'],
-            ['python', <Terminal size={18} />, 'Python Reference'],
-          ] as const).map(([tab, icon, label]) => (
+            ['inspect', Search, 'Inspect Signature'],
+            ['x509', FileCheck2, 'X.509 Certificates'],
+            ['generate', Key, 'Key & Sign Tools'],
+            ['kat', Cpu, 'KAT Validator'],
+            ['python', Terminal, 'Python Reference'],
+          ] as const).map(([tab, Icon, label]) => (
             <button
               key={tab}
               title={`Navigate to ${label}`}
@@ -660,7 +683,7 @@ if __name__ == "__main__":
                 activeTab === tab ? 'bg-[#141414] text-[#E4E3E0]' : 'hover:bg-[#141414]/5',
               )}
             >
-              {icon}
+              <Icon size={18} />
               <span className="font-serif italic">{label}</span>
             </button>
           ))}
@@ -814,11 +837,23 @@ if __name__ == "__main__":
                     <AdvancedOptions
                       label="Mode & Context used during signing"
                       mode={inspectMode} onModeChange={setInspectMode}
-                      context={inspectContext} onContextChange={setInspectContext}
+                      context={inspectContext} onContextChange={(c) => { setInspectContext(c); setInspectContextRawHex(undefined); }}
                       hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
                       // @ts-ignore - passing optional props for the legacy switch
                       inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
                     />
+                  )}
+                  {inspectContextRawHex && (
+                    <div className="flex items-center gap-2 px-3 py-1.5 border border-blue-300 bg-blue-50 text-[10px] font-mono text-blue-700">
+                      <span className="font-bold">Context (raw bytes from KAT):</span>
+                      <span className="opacity-70 truncate max-w-xs">0x{inspectContextRawHex}</span>
+                      <button
+                        type="button"
+                        onClick={() => setInspectContextRawHex(undefined)}
+                        className="ml-auto opacity-60 hover:opacity-100 shrink-0"
+                        title="Clear KAT context"
+                      >✕</button>
+                    </div>
                   )}
                 </div>
 
@@ -1434,7 +1469,7 @@ if __name__ == "__main__":
                   </motion.div>
                 )}
               </motion.div>
-            ) : (
+            ) : activeTab === 'kat' ? null : (
               <motion.div
                 key="python"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
@@ -1473,6 +1508,15 @@ if __name__ == "__main__":
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* KAT Validator — always mounted so run results survive tab switches */}
+          <div className={activeTab === 'kat' ? undefined : 'hidden'}>
+            <KatTab
+              variant={variant}
+              onVariantChange={setVariant}
+              onSendToInspector={sendKatToInspector}
+            />
+          </div>
         </div>
       </main>
 
@@ -1484,9 +1528,9 @@ if __name__ == "__main__":
             <span className="font-serif italic text-lg">ML-DSA Inspector</span>
           </div>
           <div className="flex gap-8 text-[10px] uppercase tracking-widest font-bold opacity-60">
-            <a href="#" className="hover:opacity-100">FIPS 204 Standard</a>
-            <a href="#" className="hover:opacity-100">NIST PQC</a>
-            <a href="#" className="hover:opacity-100">Documentation</a>
+            <a href="https://doi.org/10.6028/NIST.FIPS.204" target="_blank" rel="noreferrer" className="hover:opacity-100">FIPS 204 Standard</a>
+            <a href="https://csrc.nist.gov/projects/post-quantum-cryptography" target="_blank" rel="noreferrer" className="hover:opacity-100">NIST PQC</a>
+            <a href="https://csrc.nist.gov/projects/post-quantum-cryptography/post-quantum-cryptography-standardization/example-files" target="_blank" rel="noreferrer" className="hover:opacity-100">KAT Files</a>
             <a href="https://github.com/sahebbiswas/mldsa_playground" target="_blank" rel="noreferrer" className="hover:opacity-100 text-violet-300">GitHub (sahebbiswas/mldsa_playground)</a>
           </div>
           <p className="text-[10px] opacity-40 font-mono">&copy; 2026 SAHEB BISWAS. ALL RIGHTS RESERVED.</p>
