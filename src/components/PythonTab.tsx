@@ -12,7 +12,7 @@
  * All three update automatically as the user works in the other tabs.
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Copy, CheckCircle2, XCircle,
@@ -72,7 +72,14 @@ function hexAssign(varName: string, hex: string, indent = '    '): string {
   );
 }
 
-function escapePy(s: string) { return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
+/** Escape a string for use inside a Python b"..." or "...".encode() literal.
+ *  JSON.stringify handles all control characters (\n, \r, \t, \0, etc.);
+ *  we then strip the surrounding JS double-quotes it adds. */
+function escapePy(s: string): string {
+  // JSON.stringify gives us a properly escaped JS string literal including
+  // all control characters. Slice off the surrounding quotes.
+  return JSON.stringify(s).slice(1, -1);
+}
 
 function msgAssign(msg: string, isBinary: boolean, indent = '    '): string {
   if (isBinary) return hexAssign('message', msg, indent);
@@ -347,11 +354,18 @@ const TOK_CLS: Record<TT, string> = {
   plain: 'text-[#E4E3E0]/85',
 };
 
+/** Count consecutive backslashes ending at index pos (exclusive). */
+function bsCount(src: string, pos: number): number {
+  let n = 0;
+  while (pos - 1 - n >= 0 && src[pos - 1 - n] === '\\') n++;
+  return n;
+}
+
 function tokenize(src: string): Tok[] {
   const out: Tok[] = [];
   let i = 0;
-  const ch   = (d = 0) => src[i + d] ?? '';
-  const rest  = () => src.slice(i);
+  const ch = (d = 0) => src[i + d] ?? '';
+  // `rest` removed — was unused
 
   while (i < src.length) {
     // Comment
@@ -375,7 +389,7 @@ function tokenize(src: string): Tok[] {
       while (j < src.length) {
         if (src[j] === '{') { depth++; j++; continue; }
         if (src[j] === '}') { depth--; j++; continue; }
-        if (depth === 0 && src[j] === q && src[j - 1] !== '\\') { j++; break; }
+        if (depth === 0 && src[j] === q && bsCount(src, j) % 2 === 0) { j++; break; }
         j++;
       }
       out.push({ t: 'fstr', s: src.slice(i, j) }); i = j; continue;
@@ -384,14 +398,14 @@ function tokenize(src: string): Tok[] {
     // b-string  b"…" or b'…'
     if ((ch() === 'b' || ch() === 'B') && (ch(1) === '"' || ch(1) === "'")) {
       const q = ch(1); let j = i + 2;
-      while (j < src.length && !(src[j] === q && src[j - 1] !== '\\')) j++;
+      while (j < src.length && !(src[j] === q && bsCount(src, j) % 2 === 0)) j++;
       out.push({ t: 'str', s: src.slice(i, j + 1) }); i = j + 1; continue;
     }
 
     // Regular string  "…" or '…'
     if (ch() === '"' || ch() === "'") {
       const q = ch(); let j = i + 1;
-      while (j < src.length && !(src[j] === q && src[j - 1] !== '\\')) j++;
+      while (j < src.length && !(src[j] === q && bsCount(src, j) % 2 === 0)) j++;
       out.push({ t: 'str', s: src.slice(i, j + 1) }); i = j + 1; continue;
     }
 
@@ -447,11 +461,21 @@ function HighlightedCode({ code }: { code: string }) {
 
 function CopyBtn({ text, className }: { text: string; className?: string }) {
   const [st, setSt] = useState<'idle' | 'ok' | 'err'>('idle');
+  const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Clear any pending idle-reset on unmount so setSt is never called after teardown.
+  useEffect(() => () => clearTimeout(idleTimeoutRef.current), []);
+
   const go = useCallback(() => {
-    if (!navigator.clipboard) { setSt('err'); setTimeout(() => setSt('idle'), 1600); return; }
+    clearTimeout(idleTimeoutRef.current);
+    if (!navigator.clipboard) {
+      setSt('err');
+      idleTimeoutRef.current = setTimeout(() => setSt('idle'), 1600);
+      return;
+    }
     navigator.clipboard.writeText(text).then(
-      () => { setSt('ok');  setTimeout(() => setSt('idle'), 1600); },
-      () => { setSt('err'); setTimeout(() => setSt('idle'), 1600); },
+      () => { setSt('ok');  idleTimeoutRef.current = setTimeout(() => setSt('idle'), 1600); },
+      () => { setSt('err'); idleTimeoutRef.current = setTimeout(() => setSt('idle'), 1600); },
     );
   }, [text]);
   return (
