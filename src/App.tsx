@@ -51,6 +51,7 @@ import KeyAnalysisPanel from './components/KeyAnalysisPanel';
 import { processCertificateBytes, verifyX509Signature, X509ParseResult } from './services/x509';
 import { cn } from './lib/utils';
 import KatTab, { type SendToInspectorPayload } from './components/KatTab';
+import PythonTab from './components/PythonTab';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -477,34 +478,7 @@ export default function App() {
     setResult(null);
   };
 
-  // ── Python code ────────────────────────────────────────────────────────────
-  const pythonCode = `
-# ML-DSA (FIPS 204) Reference Implementation
-# Requires: pip install oqs (liboqs-python) or similar
-
-import oqs
-
-def mldsa_utility():
-    variant = "${variant.replace('ML-DSA-', 'Dilithium')}"
-    sig_alg = oqs.Signature(variant)
-    
-    # 1. Key Generation
-    public_key = sig_alg.generate_keypair()
-    private_key = sig_alg.export_secret_key()
-    
-    # 2. Signing
-    message = b"${message || 'Hello, ML-DSA!'}"
-    signature = sig_alg.sign(message)
-    
-    # 3. Verification
-    is_valid = sig_alg.verify(message, signature, public_key)
-    
-    print(f"Valid: {is_valid}")
-    print(f"Signature Length: {len(signature)} bytes")
-
-if __name__ == "__main__":
-    mldsa_utility()
-  `;
+  
 
   // ── Shared UI sub-components ───────────────────────────────────────────────
 
@@ -1502,40 +1476,29 @@ if __name__ == "__main__":
               <motion.div
                 key="python"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
               >
-                <div>
-                  <h2 className="font-serif italic text-2xl">Python Reference</h2>
-                  <p className="text-xs opacity-60">Equivalent implementation for backend integration.</p>
-                </div>
-                <div className="relative group">
-                  <button
-                    onClick={() => copyToClipboard(pythonCode)}
-                    className="absolute right-4 top-4 p-2 bg-[#E4E3E0] border border-[#141414] opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Copy size={14} />
-                  </button>
-                  <pre className="p-6 bg-[#141414] text-[#E4E3E0] font-mono text-xs overflow-x-auto rounded-sm leading-relaxed">{pythonCode}</pre>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="p-4 border border-[#141414]/20 bg-[#141414]/5">
-                    <h4 className="text-[10px] uppercase font-bold tracking-wider mb-2">Recommended Libraries</h4>
-                    <ul className="text-xs space-y-2 opacity-70 list-disc pl-4">
-                      <li><strong>liboqs-python</strong>: Official wrapper for liboqs.</li>
-                      <li><strong>cryptography</strong>: Check latest versions for FIPS 204 support.</li>
-                      <li><strong>pure-python-dilithium</strong>: For environments without C deps.</li>
-                    </ul>
-                  </div>
-                  <div className="p-4 border border-[#141414]/20 bg-[#141414]/5">
-                    <h4 className="text-[10px] uppercase font-bold tracking-wider mb-2">Security Warning</h4>
-                    <p className="text-xs opacity-70 italic">
-                      Always use side-channel resistant implementations for production private key handling.
-                      Post-quantum algorithms are sensitive to timing attacks.
-                    </p>
-                  </div>
-                </div>
+                <PythonTab
+                  variant={variant}
+                  publicKey={publicKey}
+                  signature={signature}
+                  message={message}
+                  isMessageBinary={isMessageBinary}
+                  inspectMode={inspectMode}
+                  inspectContext={inspectContext}
+                  inspectContextRawHex={inspectContextRawHex}
+                  inspectHashAlg={inspectHashAlg}
+                  genKeys={genKeys}
+                  genMessage={genMessage}
+                  isGenMessageBinary={isGenMessageBinary}
+                  genSignature={genSignature}
+                  signMode={signMode}
+                  signContext={signContext}
+                  signHashAlg={signHashAlg}
+                  signDeterministic={signDeterministic}
+                />
               </motion.div>
             )}
+                          
           </AnimatePresence>
 
           {/* KAT Validator — always mounted so run results survive tab switches */}
