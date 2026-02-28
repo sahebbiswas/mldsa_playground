@@ -98,12 +98,41 @@ export const PK_BYTES: Record<MLDSAVariant, number> = {
 
 // ─── ACVP hashAlg → noble hash function ──────────────────────────────────────
 
+// ── OID constants for all supported hash algorithms ────────────────────────
+// noble's prehash() API requires the hash function to carry a .oid property
+// (a DER-encoded AlgorithmIdentifier OID as a Uint8Array).
+// Neither SHA-2 nor SHA-3/SHAKE functions from @noble/hashes carry .oid on
+// their exported symbols — OIDs are only attached internally by noble/post-quantum
+// during its own prehash setup, not on the raw hash exports.
+// Every function passed to prehash() must therefore be wrapped with withOid().
+// These match the OIDs used in mldsa.ts (SHA-256/384/512 verified identical).
+// Source: NIST CSOR / RFC 5754 / FIPS 202 OID registry.
+const OID_SHA224     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04]);
+const OID_SHA256     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
+const OID_SHA384     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02]);
+const OID_SHA512     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03]);
+const OID_SHA512_224 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x05]);
+const OID_SHA512_256 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x06]);
+const OID_SHA3_224   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x07]);
+const OID_SHA3_256   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x08]);
+const OID_SHA3_384   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x09]);
+const OID_SHA3_512   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0a]);
+const OID_SHAKE128   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0b]);
+const OID_SHAKE256   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0c]);
+
+function withOid<F extends (msg: Uint8Array) => Uint8Array>(fn: F, oid: Uint8Array): F & { oid: Uint8Array } {
+  const wrapped = ((msg: Uint8Array) => fn(msg)) as F & { oid: Uint8Array };
+  wrapped.oid = oid;
+  return wrapped;
+}
+
 /**
  * Map ACVP hashAlg strings to a { fn, label } pair for noble's prehash() API.
  *
- * noble's prehash() requires a function with an `.oid` property. SHA3/SHAKE
- * functions from @noble/hashes/sha3.js already have OIDs attached internally.
- * SHAKE variants are XOFs — wrapped with a fixed dkLen per FIPS 204:
+ * noble's prehash() requires a function with a `.oid` property. Raw hash exports
+ * from @noble/hashes do NOT carry .oid — withOid() wraps every function to attach
+ * the correct DER-encoded AlgorithmIdentifier OID, matching the pattern in mldsa.ts.
+ * SHAKE variants are XOFs wrapped with fixed output lengths per FIPS 204:
  *   SHAKE-128 → 32 bytes, SHAKE-256 → 64 bytes.
  *
  * Returns null only for completely unrecognised strings.
@@ -111,31 +140,23 @@ export const PK_BYTES: Record<MLDSAVariant, number> = {
 function resolveHashFn(acvpHashAlg: string): { fn: any; label: string } | null {
   const n = acvpHashAlg.toUpperCase().replace(/[-_/\s]/g, '');
 
-  // ── SHA-2 ──────────────────────────────────────────────────────────────────
-  if (n === 'SHA2224' || n === 'SHA224')        return { fn: sha224,      label: 'SHA2-224' };
-  if (n === 'SHA2256' || n === 'SHA256')        return { fn: sha256,      label: 'SHA2-256' };
-  if (n === 'SHA2384' || n === 'SHA384')        return { fn: sha384,      label: 'SHA2-384' };
-  if (n === 'SHA2512' || n === 'SHA512')        return { fn: sha512,      label: 'SHA2-512' };
-  if (n === 'SHA2512224' || n === 'SHA512224')  return { fn: sha512_224,  label: 'SHA2-512/224' };
-  if (n === 'SHA2512256' || n === 'SHA512256')  return { fn: sha512_256,  label: 'SHA2-512/256' };
+  // ── SHA-2 ─────────────────────────────────────────────────────────────────
+  if (n === 'SHA2224' || n === 'SHA224')        return { fn: withOid(sha224,     OID_SHA224),     label: 'SHA2-224' };
+  if (n === 'SHA2256' || n === 'SHA256')        return { fn: withOid(sha256,     OID_SHA256),     label: 'SHA2-256' };
+  if (n === 'SHA2384' || n === 'SHA384')        return { fn: withOid(sha384,     OID_SHA384),     label: 'SHA2-384' };
+  if (n === 'SHA2512' || n === 'SHA512')        return { fn: withOid(sha512,     OID_SHA512),     label: 'SHA2-512' };
+  if (n === 'SHA2512224' || n === 'SHA512224')  return { fn: withOid(sha512_224, OID_SHA512_224), label: 'SHA2-512/224' };
+  if (n === 'SHA2512256' || n === 'SHA512256')  return { fn: withOid(sha512_256, OID_SHA512_256), label: 'SHA2-512/256' };
 
-  // ── SHA-3 (fixed output, OIDs attached by noble) ──────────────────────────
-  if (n === 'SHA3224') return { fn: sha3_224, label: 'SHA3-224' };
-  if (n === 'SHA3256') return { fn: sha3_256, label: 'SHA3-256' };
-  if (n === 'SHA3384') return { fn: sha3_384, label: 'SHA3-384' };
-  if (n === 'SHA3512') return { fn: sha3_512, label: 'SHA3-512' };
+  // ── SHA-3 ─────────────────────────────────────────────────────────────────
+  if (n === 'SHA3224') return { fn: withOid(sha3_224, OID_SHA3_224), label: 'SHA3-224' };
+  if (n === 'SHA3256') return { fn: withOid(sha3_256, OID_SHA3_256), label: 'SHA3-256' };
+  if (n === 'SHA3384') return { fn: withOid(sha3_384, OID_SHA3_384), label: 'SHA3-384' };
+  if (n === 'SHA3512') return { fn: withOid(sha3_512, OID_SHA3_512), label: 'SHA3-512' };
 
-  // ── SHAKE (XOF — wrap with fixed output length, OIDs attached by noble) ───
-  if (n === 'SHAKE128') {
-    const fn = (msg: Uint8Array) => shake128(msg, { dkLen: 32 });
-    fn.oid = (shake128 as any).oid;
-    return { fn, label: 'SHAKE-128' };
-  }
-  if (n === 'SHAKE256') {
-    const fn = (msg: Uint8Array) => shake256(msg, { dkLen: 64 });
-    fn.oid = (shake256 as any).oid;
-    return { fn, label: 'SHAKE-256' };
-  }
+  // ── SHAKE (XOF — fixed output length, OID explicitly attached) ────────────
+  if (n === 'SHAKE128') return { fn: withOid((msg: Uint8Array) => shake128(msg, { dkLen: 32 }), OID_SHAKE128), label: 'SHAKE-128' };
+  if (n === 'SHAKE256') return { fn: withOid((msg: Uint8Array) => shake256(msg, { dkLen: 64 }), OID_SHAKE256), label: 'SHAKE-256' };
 
   return null; // completely unrecognised
 }
@@ -437,9 +458,18 @@ export async function runKatVectors(
         note = verifyOk ? 'μ-based internal verify passed' : 'μ-based internal verify failed';
 
       // ── HashML-DSA (preHash mode) ──────────────────────────────────────
-      // preHash="none" means pure ML-DSA even when the field is present.
-      // Only enter this branch when preHash is a real hash specifier.
-      } else if (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) {
+      // A vector is HashML-DSA when either:
+      //   1. preHash names a real hash ("preHash", "SHA2-256", etc.) — excludes "pure"/"none"/"".
+      //   2. signatureInterface="external" with NO preHash field at all — the only HashML-DSA
+      //      signal in simple-JSON format, which has no testGroup wrapper to carry preHash.
+      //      When preHash IS present (even as "pure"/"none"/""), cond 1 already covers the
+      //      real-hash case, so cond 2 must not fire — otherwise "pure" groups from an
+      //      external-interface ACVP testGroup would incorrectly enter this branch and be
+      //      skipped as "unknown hash" when hashAlg="none".
+      } else if (
+        (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) ||
+        (v.signatureInterface === 'external' && !v.isExternalMu && v.preHash === undefined)
+      ) {
         const resolved = v.hashAlg ? resolveHashFn(v.hashAlg) : null;
         if (!resolved) {
           modeLabel = `PreHash (${v.hashAlg ?? 'unknown'})`;
