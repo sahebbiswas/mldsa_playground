@@ -120,8 +120,8 @@ const OID_SHA3_512   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65,
 const OID_SHAKE128   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0b]);
 const OID_SHAKE256   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0c]);
 
-function withOid(fn: (msg: Uint8Array) => Uint8Array, oid: Uint8Array): any {
-  const wrapped = (msg: Uint8Array) => fn(msg);
+function withOid<F extends (msg: Uint8Array) => Uint8Array>(fn: F, oid: Uint8Array): F & { oid: Uint8Array } {
+  const wrapped = ((msg: Uint8Array) => fn(msg)) as F & { oid: Uint8Array };
   wrapped.oid = oid;
   return wrapped;
 }

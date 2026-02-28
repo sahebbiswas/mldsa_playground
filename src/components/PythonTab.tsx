@@ -83,7 +83,10 @@ function escapePy(s: string): string {
 
 function msgAssign(msg: string, isBinary: boolean, indent = '    '): string {
   if (isBinary) return hexAssign('message', msg, indent);
-  return `${indent}message = b"${escapePy(msg)}"`;
+  // Build a str and encode to UTF-8 rather than embedding a b"..." literal.
+  // b"..." only allows ASCII + \xNN escapes; \uXXXX (from JSON.stringify) is not
+  // valid Python bytes syntax, so non-ASCII text would produce a SyntaxError.
+  return `${indent}message = "${escapePy(msg)}".encode('utf-8')`;
 }
 
 function ctxAssign(ctx: string, rawHex: string | undefined, indent = '    '): string {
@@ -412,7 +415,7 @@ function tokenize(src: string): Tok[] {
     // Number — hex or decimal
     if (/[0-9]/.test(ch())) {
       let j = i;
-      if (ch(1) !== undefined && src.slice(i, i + 2).match(/0[xX]/)) {
+      if (src.slice(i, i + 2).match(/0[xX]/)) {
         j += 2; while (j < src.length && /[0-9a-fA-F_]/.test(src[j])) j++;
       } else {
         while (j < src.length && /[0-9._eEjJ]/.test(src[j])) j++;
