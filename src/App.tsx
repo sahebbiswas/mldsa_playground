@@ -803,6 +803,9 @@ export default function App() {
                         <TinyBtn onClick={() => { setInspectImportError(null); inspectMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
                           <Upload size={10} /> Import .bin
                         </TinyBtn>
+                        <TinyBtn title="Save the current message as a raw binary .bin file" onClick={() => message && downloadBinary(`mldsa-message-inspect.bin`, isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message))} disabled={!message} className="opacity-60 hover:opacity-100">
+                          <Download size={10} /> Export .bin
+                        </TinyBtn>
                       </ActionRow>
                     </div>
                     <textarea
