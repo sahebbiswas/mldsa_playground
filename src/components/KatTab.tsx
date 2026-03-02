@@ -53,6 +53,8 @@ export interface SendToInspectorPayload {
   /** Raw hex-encoded context bytes from the ACVP vector (may contain non-UTF8 bytes). */
   contextRawHex: string;
   showAdvanced: boolean;
+  primitiveVerify?: boolean;
+  externalMu?: boolean;
 }
 
 interface KatTabProps {
@@ -203,15 +205,17 @@ function buildInspectorPayload(v: KatVectorResult, fallbackVariant: MLDSAVariant
     mode,
     hashAlg,
     contextRawHex: v.context ?? '',
-    showAdvanced: mode === 'hash-ml-dsa' || !!v.context,
+    showAdvanced: mode === 'hash-ml-dsa' || !!v.context || v.signatureInterface === 'internal' || v.isExternalMu,
+    primitiveVerify: v.signatureInterface === 'internal' && !v.isExternalMu,
+    externalMu: v.isExternalMu,
   };
 }
 
 // ─── Vector row ───────────────────────────────────────────────────────────────
 
 const MODE_TOOLTIPS: Record<string, string> = {
-  'Pure': 'Standard ML-DSA.Verify(): signature and message are separate fields. No pre-hashing.',
   'Pure + Context': 'Pure ML-DSA with a context string cryptographically bound to the signature.',
+  'MLDSA Primitive': 'Raw MLDSA primitive (internal interface). No M\' construction or domain separation.',
   'External μ': 'The message representative μ is provided pre-computed. Noble verifies via internal.verify() with externalMu:true, bypassing M\' construction.',
   'Legacy .rsp': 'Pre-FIPS 204 Dilithium format. SM field = signature ‖ message concatenated. These vectors may not match the final FIPS 204 spec.',
   'Error': 'An exception was thrown during verification.',
@@ -308,9 +312,33 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
                   Test Group: tgId={v.tgId} · tcId={v.tcId}
                   {v.hashAlg && ` · hashAlg=${v.hashAlg}`}
                   {v.signatureInterface && ` · interface=${v.signatureInterface}`}
-                  {v.preHash && ` · preHash=${v.preHash}`}
                 </p>
               )}
+
+              {/* Send to Inspector (MOVED TO TOP) */}
+              {(() => {
+                const payload = buildInspectorPayload(v, variant);
+                const unsupportedHash = payload.mode === 'hash-ml-dsa' && !payload.hashAlg;
+                return (
+                  <div className="flex items-center gap-3 pb-3 border-b border-[#141414]/10">
+                    <TinyBtn
+                      onClick={() => !unsupportedHash && onSendToInspector(payload)}
+                      className={unsupportedHash ? 'opacity-30 cursor-not-allowed text-blue-600 font-bold' : 'text-blue-600 font-bold'}
+                      title={unsupportedHash
+                        ? `Inspector only supports SHA2-256/384/512 for HashML-DSA. This vector uses ${v.hashAlg ?? 'an unsupported hash'} which cannot be re-verified there.`
+                        : undefined}
+                    >
+                      <Search size={10} /> Send to Inspector
+                    </TinyBtn>
+                    <span className="text-[9px] font-mono opacity-40">
+                      {unsupportedHash
+                        ? `${v.hashAlg ?? 'Hash algorithm'} not supported by Inspector`
+                        : 'Loads this vector\'s pk, signature, and message into the Inspector tab'}
+                    </span>
+                  </div>
+                );
+              })()}
+
               <HexField label="Public Key" hex={v.pk}
                 tooltip="The ML-DSA public key used to verify the signature. Size: 1312B (44), 1952B (65), or 2592B (87)." />
               <HexField
@@ -345,29 +373,6 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
                 </div>
               )}
 
-              {/* Send to Inspector */}
-              {(() => {
-                const payload = buildInspectorPayload(v, variant);
-                const unsupportedHash = payload.mode === 'hash-ml-dsa' && !payload.hashAlg;
-                return (
-                  <div className="flex items-center gap-3 pt-1 border-t border-[#141414]/10">
-                    <TinyBtn
-                      onClick={() => !unsupportedHash && onSendToInspector(payload)}
-                      className={unsupportedHash ? 'opacity-30 cursor-not-allowed text-blue-600' : 'text-blue-600'}
-                      title={unsupportedHash
-                        ? `Inspector only supports SHA2-256/384/512 for HashML-DSA. This vector uses ${v.hashAlg ?? 'an unsupported hash'} which cannot be re-verified there.`
-                        : undefined}
-                    >
-                      <Search size={10} /> Send to Inspector
-                    </TinyBtn>
-                    <span className="text-[9px] font-mono opacity-30">
-                      {unsupportedHash
-                        ? `${v.hashAlg ?? 'Hash algorithm'} not supported by Inspector`
-                        : 'Loads this vector\'s pk, signature, and message into the Inspector tab'}
-                    </span>
-                  </div>
-                );
-              })()}
             </div>
           </motion.div>
         )}
@@ -386,55 +391,39 @@ function SummaryBar({ result }: { result: KatRunResult }) {
 
   return (
     <div className={cn(
-      'p-5 border-2 space-y-3',
+      'p-3 border space-y-2',
       hasMismatches ? 'border-orange-500 bg-orange-50' :
         allPass ? 'border-[#141414] bg-white' : 'border-red-500 bg-red-50',
     )}>
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3">
         {hasMismatches
-          ? <AlertTriangle className="w-8 h-8 text-orange-600 shrink-0" />
+          ? <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0" />
           : allPass
-            ? <CheckCircle2 className="w-8 h-8 text-green-600 shrink-0" />
-            : <XCircle className="w-8 h-8 text-red-600 shrink-0" />}
-        <div className="space-y-1">
-          <p className={cn('font-bold text-lg font-serif italic',
-            hasMismatches ? 'text-orange-700' : allPass ? 'text-green-700' : 'text-red-700')}>
-            {hasMismatches
-              ? `${result.expectedMismatches} expected-result mismatch${result.expectedMismatches !== 1 ? 'es' : ''}`
-              : allPass ? 'All vectors passed' : `${result.failed} vector${result.failed !== 1 ? 's' : ''} failed`}
-          </p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono opacity-60">
-            <span className="flex items-center gap-1">
-              {result.passed}/{runnable} passed
-              <Tip text="Vectors where ML-DSA.Verify() returned true, out of the runnable (non-skipped) total." />
+            ? <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+            : <XCircle className="w-5 h-5 text-red-600 shrink-0" />}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-4">
+            <p className={cn('font-bold text-sm font-serif italic truncate',
+              hasMismatches ? 'text-orange-700' : allPass ? 'text-green-700' : 'text-red-700')}>
+              {hasMismatches
+                ? `${result.expectedMismatches} expected mismatch${result.expectedMismatches !== 1 ? 'es' : ''}`
+                : allPass ? 'All vectors passed' : `${result.failed} vector${result.failed !== 1 ? 's' : ''} failed`}
+            </p>
+            <span className={cn('text-xl font-mono font-bold shrink-0',
+              hasMismatches ? 'text-orange-600' : allPass ? 'text-green-700' : 'text-red-600')}>
+              {pct}%
             </span>
-            {result.skipped > 0 && (
-              <span className="flex items-center gap-1">
-                {result.skipped} skipped
-                <Tip text="Vectors skipped because their hash algorithm is unrecognised (not a FIPS 204 hash), or an exception was thrown." />
-              </span>
-            )}
-            {result.expectedMismatches > 0 && (
-              <span className="flex items-center gap-1 text-orange-700">
-                {result.expectedMismatches} expected mismatch{result.expectedMismatches !== 1 ? 'es' : ''}
-                <Tip text="Vectors where our result disagrees with the NIST expectedResults.json file. These indicate a potential implementation issue." />
-              </span>
-            )}
-            <span>{result.variant}</span>
-            <span>{result.durationMs}ms</span>
           </div>
-          {result.modesPresent.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap pt-1">
-              {result.modesPresent.map(m => <ModePill key={m} mode={m} />)}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-x-3 text-[9px] font-mono opacity-50">
+            <span>{result.passed}/{runnable} passed</span>
+            {result.skipped > 0 && <span>· {result.skipped} skipped</span>}
+            {result.expectedMismatches > 0 && <span className="text-orange-700">· {result.expectedMismatches} mismatched</span>}
+            <span>· {result.variant}</span>
+            <span>· {result.durationMs}ms</span>
+          </div>
         </div>
-        <span className={cn('ml-auto text-3xl font-mono font-bold',
-          hasMismatches ? 'text-orange-600' : allPass ? 'text-green-700' : 'text-red-600')}>
-          {pct}%
-        </span>
       </div>
-      <div className="h-1.5 w-full bg-[#141414]/10 rounded-full overflow-hidden">
+      <div className="h-1 w-full bg-[#141414]/5 rounded-full overflow-hidden">
         <div
           className={cn('h-full transition-all duration-500',
             hasMismatches ? 'bg-orange-500' : allPass ? 'bg-green-500' : 'bg-red-500')}
@@ -456,7 +445,7 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
   const [expectedError, setExpectedError] = useState<string | null>(null);
   const [result, setResult] = useState<KatRunResult | null>(null);
   const [activeVariant, setActiveVariant] = useState<MLDSAVariant>(variant);
-  const [vectorLimit, setVectorLimit] = useState<number>(25);
+  const [vectorLimit, setVectorLimit] = useState<number>(200);
   const [fileName, setFileName] = useState<string | null>(null);
   const [expectedFileName, setExpectedFileName] = useState<string | null>(null);
   const [expectedResults, setExpectedResults] = useState<ExpectedResultsMap | null>(null);
@@ -579,48 +568,41 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
         </p>
       </div>
 
-      {/* Source links */}
-      <div className="p-4 border border-[#141414]/20 bg-[#141414]/5 space-y-2">
-        <div className="flex items-center gap-2 opacity-60 mb-2">
-          <Info size={13} />
-          <span className="text-[10px] uppercase font-bold tracking-wider">Official KAT Sources</span>
-        </div>
-        <div className="flex flex-wrap gap-4">
-          {KAT_SOURCES.map(s => (
-            <a key={s.url} href={s.url} target="_blank" rel="noreferrer"
-              className="flex items-center gap-1.5 text-xs font-mono hover:underline opacity-70 hover:opacity-100 transition-opacity">
-              <ExternalLink size={11} />{s.label}
-            </a>
-          ))}
-        </div>
-        <p className="text-[10px] opacity-50 leading-relaxed pt-1">
-          From <code className="bg-[#141414]/10 px-1">usnistgov/ACVP-Server</code>, navigate to
-          <code className="bg-[#141414]/10 px-1 mx-1">vectors/ML-DSA/</code> and download the
-          <code className="bg-[#141414]/10 px-1 mx-1">internalProjection.json</code> (prompt) and
-          <code className="bg-[#141414]/10 px-1 mx-1">expectedResults.json</code> (companion) files.
-        </p>
+      {/* Source links inline */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-2 border-y border-[#141414]/10">
+        <span className="text-[9px] uppercase font-bold tracking-wider opacity-40">KAT Sources:</span>
+        {KAT_SOURCES.map(s => (
+          <a key={s.url} href={s.url} target="_blank" rel="noreferrer"
+            className="flex items-center gap-1 text-[10px] font-mono hover:underline opacity-60 hover:opacity-100 transition-opacity">
+            <ExternalLink size={10} />{s.label}
+          </a>
+        ))}
       </div>
 
-      {/* Max Vectors (always visible) + Advanced toggle */}
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-[10px] uppercase font-bold opacity-40 tracking-wider flex items-center gap-1">
-            Max Vectors
-            <Tip text="Caps the number of vectors run per file. ACVP files can contain hundreds; start small to check format compatibility." />
+      {/* Integrated Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-[10px] uppercase font-bold opacity-40 tracking-wider">
+            Max Vectors:
           </label>
-          <select value={vectorLimit} onChange={e => setVectorLimit(Number(e.target.value))}
-            className="px-3 py-1.5 border border-[#141414]/30 bg-transparent font-mono text-xs focus:outline-none focus:border-[#141414]">
-            {[10, 25, 50, 100, 250, 500].map(n => <option key={n} value={n}>{n} vectors</option>)}
+          <select
+            value={vectorLimit}
+            onChange={e => setVectorLimit(Number(e.target.value))}
+            className="bg-transparent font-mono text-[10px] border-b border-[#141414]/30 focus:outline-none focus:border-[#141414] py-0.5"
+          >
+            {[10, 50, 100, 200, 500].map(n => <option key={n} value={n}>{n}</option>)}
           </select>
+          <Tip text="Caps the number of vectors run per file. ACVP files can contain hundreds; default is 200, max 500." />
         </div>
+
         <button
           type="button"
           onClick={() => setAdvancedOpen(o => !o)}
-          className="flex items-center gap-1.5 px-3 py-1.5 border border-[#141414]/20 text-[10px] font-mono uppercase tracking-widest opacity-50 hover:opacity-100 hover:border-[#141414]/50 transition-all"
+          className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest opacity-50 hover:opacity-100 transition-all"
         >
           <ChevronDown size={11} className={cn('transition-transform', advancedOpen && 'rotate-180')} />
-          Advanced
-          {hasExpected && <span className="w-1.5 h-1.5 rounded-full bg-blue-500 ml-1" />}
+          {advancedOpen ? 'Hide' : 'Show'} Advanced
+          {hasExpected && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
         </button>
       </div>
 
@@ -793,8 +775,8 @@ export default function KatTab({ variant, onVariantChange, onSendToInspector }: 
 
               {displayVectors.length === 0
                 ? <div className="p-6 text-center text-xs opacity-40 font-mono">
-                    {filterMode !== 'all' ? 'No vectors match this filter.' : 'No vectors to display.'}
-                  </div>
+                  {filterMode !== 'all' ? 'No vectors match this filter.' : 'No vectors to display.'}
+                </div>
                 : displayVectors.map(v => <VectorRow key={`${v.tgId ?? 0}-${v.tcId}`} v={v} variant={result.variant} onSendToInspector={onSendToInspector} />)
               }
             </div>

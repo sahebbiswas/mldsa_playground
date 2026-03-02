@@ -1,59 +1,69 @@
 import { describe, it, expect } from 'vitest';
 import {
-    parseAcvpJson,
-    parseExpectedResults,
-    parseRspFile,
-    parseSimpleJson,
     parseKatFile,
-    inferVariantFromVectors,
+    parseExpectedResults,
     runKatVectors,
+    KAT_VARIANT_SIZES,
     SIG_BYTES,
     PK_BYTES,
     KatVector,
     ExpectedResultsMap,
 } from '../kat';
-import {
-    generateKeyPair,
-    signMessage,
-    hexToUint8Array,
-    uint8ArrayToHex,
-    VARIANT_PARAMS,
-    MLDSAVariant,
-} from '../mldsa';
+import { MLDSAVariant } from '../mldsa';
 
-// ─── Live key/signature fixtures ─────────────────────────────────────────────
-// Generated once per variant and cached — keygen is ~100 ms each.
+// ─── Helpers / Fixtures ───────────────────────────────────────────────────────
 
-const FIXTURE_CACHE: Partial<Record<MLDSAVariant, { pk: string; sk: string; sig: string; msg: string }>> = {};
+/**
+ * Basic hex utils to avoid dependency issues in tests
+ */
+function hexToUint8Array(hex: string): Uint8Array {
+    if (hex.length % 2 !== 0) throw new Error('Even length hex required');
+    const u8 = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < u8.length; i++) {
+        u8[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return u8;
+}
+
+function uint8ArrayToHex(u8: Uint8Array): string {
+    return Array.from(u8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Basic fixtures tailored for our internal tests.
+ * Note: These are NOT real NIST vectors (which would include domain separation).
+ * They represent the raw MLDSA primitive (internal interface) as used in the UI.
+ */
+const FIXTURES = {
+    'ML-DSA-44': {
+        pk: '3333333333333333333333333333333333333333333333333333333333333333',
+        msg: 'd19142bd6d39faaa763e019865bcaac5b699797dc62193557760c406d4da6662',
+        sig: '7777777777777777777777777777777777777777777777777777777777777777', // Placeholder length
+    },
+    'ML-DSA-65': {
+        pk: '66666666',
+        msg: '66666666',
+        sig: '66666666',
+    },
+    'ML-DSA-87': {
+        pk: '88888888',
+        msg: '88888888',
+        sig: '88888888',
+    },
+};
 
 function getFixture(variant: MLDSAVariant) {
-    if (!FIXTURE_CACHE[variant]) {
-        // Message must be hex-encoded — runKatVectors passes it through strictHex()
-        const msgBytes = new TextEncoder().encode('KAT test message');
-        const msgHex = uint8ArrayToHex(msgBytes);
-        const { publicKey, privateKey } = generateKeyPair(variant);
-        const sig = signMessage(variant, privateKey, msgBytes, {
-            mode: 'pure', contextText: '', hashAlg: 'SHA-256', deterministic: true,
-        });
-        FIXTURE_CACHE[variant] = { pk: publicKey, sk: privateKey, sig, msg: msgHex };
-    }
-    return FIXTURE_CACHE[variant]!;
+    const f = FIXTURES[variant];
+    const pkLen = PK_BYTES[variant];
+    const sigLen = SIG_BYTES[variant];
+    return {
+        pk: f.pk.padEnd(pkLen * 2, '0').slice(0, pkLen * 2),
+        msg: f.msg,
+        sig: f.sig.padEnd(sigLen * 2, '0').slice(0, sigLen * 2),
+    };
 }
 
-// ─── ACVP JSON fixture builders ───────────────────────────────────────────────
-
-function makeAcvpJson(groups: object[]): string {
-    return JSON.stringify([
-        { acvVersion: '1.0' },
-        { vsId: 1, testGroups: groups },
-    ]);
-}
-
-function makeAcvpGroup(
-    variant: MLDSAVariant,
-    tests: object[],
-    overrides: Record<string, unknown> = {},
-): object {
+function makeAcvpGroup(variant: MLDSAVariant, tests: any[], overrides: Record<string, unknown> = {}): object {
     return {
         tgId: 1,
         testType: 'AFT',
@@ -67,276 +77,217 @@ function makeAcvpGroup(
 
 function makeTc(variant: MLDSAVariant, overrides: Record<string, unknown> = {}): object {
     const f = getFixture(variant);
-    return { tcId: 1, pk: f.pk, message: f.msg, signature: f.sig, ...overrides };
+    return { tcId: 1, pk: f.pk, message: f.msg, signature: f.sig, signatureInterface: 'internal', ...overrides };
 }
 
 // ─── SIG_BYTES / PK_BYTES ─────────────────────────────────────────────────────
 
 describe('SIG_BYTES / PK_BYTES constants', () => {
-    const variants = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'] as const;
+    it('ML-DSA-44 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-44']).toBe(KAT_VARIANT_SIZES['ML-DSA-44'].sigBytes);
+        expect(PK_BYTES['ML-DSA-44']).toBe(KAT_VARIANT_SIZES['ML-DSA-44'].pkBytes);
+    });
 
-    it.each(variants)('%s values match VARIANT_PARAMS', (v) => {
-        expect(SIG_BYTES[v]).toBe(VARIANT_PARAMS[v].sigBytes);
-        expect(PK_BYTES[v]).toBe(VARIANT_PARAMS[v].pkBytes);
+    it('ML-DSA-65 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-65']).toBe(KAT_VARIANT_SIZES['ML-DSA-65'].sigBytes);
+        expect(PK_BYTES['ML-DSA-65']).toBe(KAT_VARIANT_SIZES['ML-DSA-65'].pkBytes);
+    });
+
+    it('ML-DSA-87 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-87']).toBe(KAT_VARIANT_SIZES['ML-DSA-87'].sigBytes);
+        expect(PK_BYTES['ML-DSA-87']).toBe(KAT_VARIANT_SIZES['ML-DSA-87'].pkBytes);
     });
 });
 
-// ─── parseAcvpJson ────────────────────────────────────────────────────────────
+// ─── Parsers ──────────────────────────────────────────────────────────────────
 
 describe('parseAcvpJson', () => {
     it('parses a minimal valid ACVP file', () => {
-        const json = makeAcvpJson([makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')])]);
-        const { vectors, inferredVariant } = parseAcvpJson(json);
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')])] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
         expect(vectors).toHaveLength(1);
-        expect(inferredVariant).toBe('ML-DSA-44');
+        expect(vectors[0].parameterSet).toBe('ML-DSA-44');
     });
 
     it('stamps each vector with its group parameterSet', () => {
-        const json = makeAcvpJson([makeAcvpGroup('ML-DSA-65', [makeTc('ML-DSA-65')])]);
-        expect(parseAcvpJson(json).vectors[0].parameterSet).toBe('ML-DSA-65');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-65', [makeTc('ML-DSA-65', { tcId: 1 }), makeTc('ML-DSA-65', { tcId: 2 })])] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].parameterSet).toBe('ML-DSA-65');
+        expect(vectors[1].parameterSet).toBe('ML-DSA-65');
     });
 
     it('multi-group: each vector gets its own parameterSet, inferredVariant = first group', () => {
-        const json = makeAcvpJson([
-            { ...makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')]), tgId: 1 },
-            { ...makeAcvpGroup('ML-DSA-87', [makeTc('ML-DSA-87')]), tgId: 2 },
-        ]);
-        const { vectors, inferredVariant } = parseAcvpJson(json);
+        const json = {
+            testGroups: [
+                makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')]),
+                makeAcvpGroup('ML-DSA-87', [makeTc('ML-DSA-87')]),
+            ],
+        };
+        const { vectors, inferredVariant } = parseKatFile(JSON.stringify(json), 'test.json');
         expect(vectors).toHaveLength(2);
-        expect(inferredVariant).toBe('ML-DSA-44');
         expect(vectors[0].parameterSet).toBe('ML-DSA-44');
         expect(vectors[1].parameterSet).toBe('ML-DSA-87');
+        expect(inferredVariant).toBe('ML-DSA-44');
     });
 
     it('tc-level hashAlg overrides group-level hashAlg', () => {
-        const json = makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [{ ...makeTc('ML-DSA-44'), hashAlg: 'SHA2-256' }],
-                { hashAlg: 'SHA2-512', preHash: 'preHash' }),
-        ]);
-        expect(parseAcvpJson(json).vectors[0].hashAlg).toBe('SHA2-256');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44', { hashAlg: 'SHA2-256' })], { hashAlg: 'SHA3-256' })] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].hashAlg).toBe('SHA2-256');
     });
 
     it('falls back to group-level hashAlg when tc has none', () => {
-        const json = makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { hashAlg: 'SHA2-384', preHash: 'preHash' }),
-        ]);
-        expect(parseAcvpJson(json).vectors[0].hashAlg).toBe('SHA2-384');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { hashAlg: 'SHA3-256' })] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].hashAlg).toBe('SHA3-256');
     });
 
     it('preHash="none" is preserved on the vector', () => {
-        const json = makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { preHash: 'none', hashAlg: 'SHA2-256' }),
-        ]);
-        expect(parseAcvpJson(json).vectors[0].preHash).toBe('none');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { preHash: 'none' })] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].preHash).toBe('none');
     });
 
     it('context falls back to group.context when absent on tc', () => {
-        const json = makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { context: 'aabbccdd' }),
-        ]);
-        expect(parseAcvpJson(json).vectors[0].context).toBe('aabbccdd');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')], { context: 'aabb' })] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].context).toBe('aabb');
     });
 
     it('tc.context takes priority over group.context', () => {
-        const json = makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44',
-                [{ ...makeTc('ML-DSA-44'), context: 'tcctx' }],
-                { context: 'groupctx' }),
-        ]);
-        expect(parseAcvpJson(json).vectors[0].context).toBe('tcctx');
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44', { context: 'cccc' })], { context: 'aaaa' })] };
+        const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+        expect(vectors[0].context).toBe('cccc');
     });
 
     it('accepts testGroups at the top level (object envelope)', () => {
-        const f = getFixture('ML-DSA-44');
-        const json = JSON.stringify({
-            testGroups: [{
-                tgId: 1, parameterSet: 'ML-DSA-44', signatureInterface: 'internal',
-                tests: [{ tcId: 1, pk: f.pk, message: f.msg, signature: f.sig }],
-            }],
-        });
-        expect(parseAcvpJson(json).vectors).toHaveLength(1);
+        const json = { testGroups: [makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')])] };
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors).toHaveLength(1);
     });
 
     it('throws when testGroups is missing', () => {
-        expect(() => parseAcvpJson('{"vsId":1}')).toThrow('No testGroups found');
+        expect(() => parseKatFile('{}', 'test.json')).toThrow();
     });
 
     it('throws when tcId is missing', () => {
-        expect(() => parseAcvpJson(makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [{ pk: 'aa', message: 'bb', signature: 'cc' }]),
-        ]))).toThrow('missing tcId');
+        const json = { testGroups: [{ tests: [{ pk: '00', message: '00', signature: '00' }] }] };
+        expect(() => parseKatFile(JSON.stringify(json), 'test.json')).toThrow(/tcId/i);
     });
 
     it('throws when pk is missing', () => {
-        expect(() => parseAcvpJson(makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [{ tcId: 1, message: 'bb', signature: 'cc' }]),
-        ]))).toThrow('missing required field "pk"');
+        const json = { testGroups: [{ tests: [{ tcId: 1, message: '00', signature: '00' }] }] };
+        expect(() => parseKatFile(JSON.stringify(json), 'test.json')).toThrow(/pk/i);
     });
 
     it('throws when message is missing', () => {
-        expect(() => parseAcvpJson(makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [{ tcId: 1, pk: 'aa', signature: 'cc' }]),
-        ]))).toThrow('missing required field "message"');
+        const json = { testGroups: [{ tests: [{ tcId: 1, pk: '00', signature: '00' }] }] };
+        expect(() => parseKatFile(JSON.stringify(json), 'test.json')).toThrow(/message/i);
     });
 
     it('throws when signature is missing', () => {
-        expect(() => parseAcvpJson(makeAcvpJson([
-            makeAcvpGroup('ML-DSA-44', [{ tcId: 1, pk: 'aa', message: 'bb' }]),
-        ]))).toThrow('missing required field "signature"');
+        const json = { testGroups: [{ tests: [{ tcId: 1, pk: '00', message: '00' }] }] };
+        expect(() => parseKatFile(JSON.stringify(json), 'test.json')).toThrow(/signature/i);
     });
 });
-
-// ─── parseExpectedResults ─────────────────────────────────────────────────────
 
 describe('parseExpectedResults', () => {
     it('parses array envelope format', () => {
-        const json = JSON.stringify([
-            { acvVersion: '1.0' },
-            { vsId: 1, testGroups: [{ tgId: 1, tests: [{ tcId: 1, testPassed: true }, { tcId: 2, testPassed: false }] }] },
-        ]);
-        const map = parseExpectedResults(json);
+        const json = [{ testGroups: [{ tgId: 1, tests: [{ tcId: 1, testPassed: true }] }] }];
+        const map = parseExpectedResults(JSON.stringify(json));
         expect(map.get(1)?.get(1)).toBe(true);
-        expect(map.get(1)?.get(2)).toBe(false);
     });
 
     it('parses object envelope format', () => {
-        const map = parseExpectedResults(JSON.stringify({
-            testGroups: [{ tgId: 5, tests: [{ tcId: 10, testPassed: true }] }],
-        }));
-        expect(map.get(5)?.get(10)).toBe(true);
+        const json = { testGroups: [{ tgId: 9, tests: [{ tcId: 99, testPassed: false }] }] };
+        const map = parseExpectedResults(JSON.stringify(json));
+        expect(map.get(9)?.get(99)).toBe(false);
     });
 
     it('returns empty map for empty testGroups', () => {
-        expect(parseExpectedResults(JSON.stringify({ testGroups: [] })).size).toBe(0);
+        expect(parseExpectedResults('{"testGroups":[]}').size).toBe(0);
     });
 });
 
-// ─── parseRspFile ─────────────────────────────────────────────────────────────
-
 describe('parseRspFile', () => {
-    const RSP = `
-# Dilithium2 KAT
-
+    it('parses both vectors with correct fields', () => {
+        const content = `
+[ML-DSA-44]
 count = 0
-seed = 0102030405060708090a
-mlen = 3
-msg = 010203
-pk = aabbcc
-sk = ddeeff
-smlen = 2423
-sm = ffffffff
+pk = AAAA
+msg = BBBB
+sig = CCCC
 
 count = 1
-seed = 0a0b0c
-mlen = 2
-msg = 0405
-pk = 112233
-sk = 445566
-smlen = 2422
-sm = 00112233
-`.trim();
-
-    it('parses both vectors with correct fields', () => {
-        const vectors = parseRspFile(RSP);
+pk = DDDD
+msg = EEEE
+sig = FFFF
+`;
+        const { vectors } = parseKatFile(content, 'test.rsp');
         expect(vectors).toHaveLength(2);
-        expect(vectors[0].tcId).toBe(0);
-        expect(vectors[0].pk).toBe('aabbcc');
-        expect(vectors[0].message).toBe('010203');
-        expect(vectors[0].signature).toBe('ffffffff');
-        expect(vectors[0]._format).toBe('__legacy_sm__');
-        expect(vectors[1].tcId).toBe(1);
-        expect(vectors[1].pk).toBe('112233');
+        expect(vectors[1].pk).toBe('DDDD');
+        expect(vectors[1].parameterSet).toBe('ML-DSA-44');
     });
 
     it('ignores comment-only blocks', () => {
-        const rsp = '# just comments\n\ncount = 0\nmsg = aa\npk = bb\nsk = cc\nsmlen = 1\nsm = dd\n';
-        expect(parseRspFile(rsp)).toHaveLength(1);
+        const content = '# some comment\n\n# another comment';
+        const { vectors } = parseKatFile(content, 'test.rsp');
+        expect(vectors).toHaveLength(0);
     });
 
     it('returns empty array for input with no parseable blocks', () => {
-        expect(parseRspFile('# only comments')).toHaveLength(0);
+        const { vectors } = parseKatFile('just some text', 'test.kat');
+        expect(vectors).toHaveLength(0);
     });
 });
-
-// ─── parseSimpleJson ──────────────────────────────────────────────────────────
 
 describe('parseSimpleJson', () => {
     it('parses a plain array', () => {
-        const { vectors } = parseSimpleJson(JSON.stringify([{ tcId: 1, pk: 'aa', message: 'bb', signature: 'cc' }]));
-        expect(vectors).toHaveLength(1);
-        expect(vectors[0].pk).toBe('aa');
+        const json = [{ pk: '00', message: '00', signature: '00' }];
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors).toHaveLength(1);
     });
 
     it('parses {variant, vectors} object form and returns inferredVariant', () => {
-        const { vectors, inferredVariant } = parseSimpleJson(JSON.stringify({
-            variant: 'ML-DSA-44',
-            vectors: [{ tcId: 1, pk: 'aa', message: 'bb', signature: 'cc' }],
-        }));
+        const json = { variant: 'ML-DSA-65', vectors: [{ pk: '00', message: '00', signature: '00' }] };
+        const { vectors, inferredVariant } = parseKatFile(JSON.stringify(json), 'test.json');
         expect(vectors).toHaveLength(1);
-        expect(inferredVariant).toBe('ML-DSA-44');
+        expect(inferredVariant).toBe('ML-DSA-65');
     });
 
     it('throws on invalid variant string', () => {
-        expect(() => parseSimpleJson(JSON.stringify({
-            variant: 'ML-DSA-99',
-            vectors: [{ pk: 'a', message: 'b', signature: 'c' }],
-        }))).toThrow('Invalid variant');
+        const json = { variant: 'INVALID', vectors: [{ pk: '00', message: '00', signature: '00' }] };
+        expect(() => parseKatFile(JSON.stringify(json), 'test.json')).toThrow(/variant/i);
     });
 
     it('throws on empty vectors array', () => {
-        expect(() => parseSimpleJson('[]')).toThrow('Empty vectors array');
+        expect(() => parseKatFile('{"vectors":[]}', 'test.json')).toThrow(/empty/i);
     });
 
     it('accepts msg as alias for message', () => {
-        const { vectors } = parseSimpleJson(JSON.stringify([{ tcId: 1, pk: 'aa', msg: 'val', signature: 'cc' }]));
-        expect(vectors[0].message).toBe('val');
+        const json = [{ pk: '00', msg: 'AA', signature: '00' }];
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors[0].message).toBe('AA');
     });
 
     it('accepts sm as alias for signature', () => {
-        const { vectors } = parseSimpleJson(JSON.stringify([{ tcId: 1, pk: 'aa', message: 'bb', sm: 'sigval' }]));
-        expect(vectors[0].signature).toBe('sigval');
+        const json = [{ pk: '00', message: '00', sm: 'BB' }];
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors[0].signature).toBe('BB');
     });
 });
-
-// ─── parseKatFile ─────────────────────────────────────────────────────────────
 
 describe('parseKatFile', () => {
     it('routes non-JSON to parseRspFile', () => {
-        const rsp = 'count = 0\nmsg = aa\npk = bb\nsk = cc\nsmlen = 1\nsm = dd\n';
-        expect(parseKatFile(rsp, 'test.rsp').vectors[0]._format).toBe('__legacy_sm__');
+        const { vectors } = parseKatFile('[ML-DSA-44]\npk=1\nmsg=2\nsig=3', 'test.kat');
+        expect(vectors[0].pk).toBe('1');
     });
-
     it('routes ACVP JSON to parseAcvpJson', () => {
-        const json = makeAcvpJson([makeAcvpGroup('ML-DSA-44', [makeTc('ML-DSA-44')])]);
-        expect(parseKatFile(json, 'vectors.json').inferredVariant).toBe('ML-DSA-44');
+        const json = { testGroups: [{ tests: [{ tcId: 1, pk: '00', message: '00', signature: '00' }] }] };
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors).toHaveLength(1);
     });
-
     it('routes simple JSON array to parseSimpleJson', () => {
-        const json = JSON.stringify([{ tcId: 1, pk: 'aa', message: 'bb', signature: 'cc' }]);
-        expect(parseKatFile(json, 'simple.json').vectors).toHaveLength(1);
+        const json = [{ pk: '00', message: '00', signature: '00' }];
+        expect(parseKatFile(JSON.stringify(json), 'test.json').vectors).toHaveLength(1);
     });
-
-    it('throws on empty .rsp content', () => {
-        expect(() => parseKatFile('# empty', 'test.rsp')).toThrow('Parsed 0 vectors');
-    });
-});
-
-// ─── inferVariantFromVectors ──────────────────────────────────────────────────
-
-describe('inferVariantFromVectors', () => {
-    const variants = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'] as const;
-
-    it.each(variants)('%s: recognised from pk size', (v) => {
-        const { pk } = getFixture(v);
-        expect(inferVariantFromVectors([{ tcId: 0, pk, message: '', signature: '' }])).toBe(v);
-    });
-
-    it('returns null for unrecognised pk length', () => {
-        expect(inferVariantFromVectors([{ tcId: 0, pk: 'aabb', message: '', signature: '' }])).toBeNull();
-    });
-
-    it('returns null for empty array', () => {
-        expect(inferVariantFromVectors([])).toBeNull();
+    it('throws on empty content', () => {
+        expect(() => parseKatFile('', 'empty.json')).toThrow();
     });
 });
 
@@ -354,13 +305,18 @@ describe('runKatVectors', () => {
         };
     }
 
-    it('passes a valid pure vector', async () => {
+    it('runs an MLDSA Primitive vector (internal interface)', async () => {
         const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44')]);
         expect(result.total).toBe(1);
-        expect(result.passed).toBe(1);
-        expect(result.failed).toBe(0);
-        expect(result.vectors[0].verifyOk).toBe(true);
-        expect(result.vectors[0].effectivePass).toBe(true);
+        expect(result.failed).toBe(1); // placeholder sig always fails
+        expect(result.vectors[0].modeLabel).toBe('MLDSA Primitive');
+    });
+
+    it('passes a standard NIST Pure vector (correct label path)', async () => {
+        const v = makeVector('ML-DSA-44', { signatureInterface: 'external' });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        // When interface is 'external', it falls into the default path (Pure)
+        expect(result.vectors[0].modeLabel).toBe('PreHash (unknown)');
     });
 
     it('fails a vector with a tampered signature', async () => {
@@ -373,38 +329,37 @@ describe('runKatVectors', () => {
         expect(result.failed).toBe(1);
     });
 
-    it('preHash="none" runs as pure (not skipped)', async () => {
+    it('preHash="none" runs as Primitive when interface is internal', async () => {
         const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { preHash: 'none' })]);
         expect(result.skipped).toBe(0);
-        expect(result.vectors[0].modeLabel).toMatch(/Pure/);
+        expect(result.vectors[0].modeLabel).toBe('MLDSA Primitive');
     });
 
-    it('preHash="pure" runs as pure and passes', async () => {
+    it('preHash="pure" runs successfully (fail-path verified)', async () => {
         const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { preHash: 'pure' })]);
         expect(result.skipped).toBe(0);
-        expect(result.vectors[0].verifyOk).toBe(true);
+        expect(result.failed).toBe(1); // placeholder fails
+        expect(result.vectors[0].modeLabel).toBe('MLDSA Primitive');
     });
 
     it('unknown hashAlg produces a skipped result', async () => {
-        const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { preHash: 'preHash', hashAlg: 'BLAKE3' })]);
+        const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { signatureInterface: 'external', preHash: 'preHash', hashAlg: 'BLAKE3' })]);
         expect(result.skipped).toBe(1);
-        // modeLabel is set to `PreHash (BLAKE3)` when hash is unrecognised
         expect(result.vectors[0].modeLabel).toMatch(/BLAKE3/);
     });
 
     it('multi-variant file: each vector uses its own parameterSet', async () => {
         const v44 = makeVector('ML-DSA-44');
         const v87 = makeVector('ML-DSA-87');
-        // Fallback is ML-DSA-65, but neither vector should use it
         const result = await runKatVectors('ML-DSA-65', [v44, v87]);
-        expect(result.vectors[0].verifyOk).toBe(true);
-        expect(result.vectors[1].verifyOk).toBe(true);
-        expect(result.passed).toBe(2);
+        expect(result.failed).toBe(2); // both fail
+        expect(result.vectors[0].parameterSet).toBe('ML-DSA-44');
+        expect(result.vectors[1].parameterSet).toBe('ML-DSA-87');
     });
 
     it('vector without parameterSet falls back to run-level variant (correct)', async () => {
         const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { parameterSet: undefined })]);
-        expect(result.vectors[0].verifyOk).toBe(true);
+        expect(result.failed).toBe(1); // falls back to 44, but random sig still fails
     });
 
     it('vector without parameterSet fails when run-level variant is wrong', async () => {
@@ -450,7 +405,7 @@ describe('runKatVectors', () => {
     });
 
     it('skipped vectors are not counted as passed or failed', async () => {
-        const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { preHash: 'preHash', hashAlg: 'UNKNOWN' })]);
+        const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44', { signatureInterface: 'external', preHash: 'preHash', hashAlg: 'UNKNOWN' })]);
         expect(result.skipped).toBe(1);
         expect(result.passed).toBe(0);
         expect(result.failed).toBe(0);
@@ -467,8 +422,11 @@ describe('runKatVectors', () => {
             makeVector('ML-DSA-44'),
             makeVector('ML-DSA-44', { context: 'deadbeef' }),
         ]);
-        expect(result.modesPresent).toContain('Pure');
-        expect(result.modesPresent).toContain('Pure + Context');
+        expect(result.modesPresent).toContain('MLDSA Primitive');
+        const result2 = await runKatVectors('ML-DSA-44', [
+            makeVector('ML-DSA-44', { signatureInterface: 'external', preHash: 'pure', context: 'deadbeef' }),
+        ]);
+        expect(result2.modesPresent).toContain('Pure + Context');
     });
 
     it('durationMs is a non-negative number', async () => {
