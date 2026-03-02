@@ -84,16 +84,22 @@ export type ExpectedResultsMap = Map<number, Map<number, boolean>>;
 
 // ─── Sizes ────────────────────────────────────────────────────────────────────
 
+export const VARIANT_PARAMS: Record<MLDSAVariant, { pkSize: number; sigSize: number }> = {
+  'ML-DSA-44': { pkSize: 1312, sigSize: 2420 },
+  'ML-DSA-65': { pkSize: 1952, sigSize: 3309 },
+  'ML-DSA-87': { pkSize: 2592, sigSize: 4627 },
+};
+
 export const SIG_BYTES: Record<MLDSAVariant, number> = {
-  'ML-DSA-44': 2420,
-  'ML-DSA-65': 3309,
-  'ML-DSA-87': 4627,
+  'ML-DSA-44': VARIANT_PARAMS['ML-DSA-44'].sigSize,
+  'ML-DSA-65': VARIANT_PARAMS['ML-DSA-65'].sigSize,
+  'ML-DSA-87': VARIANT_PARAMS['ML-DSA-87'].sigSize,
 };
 
 export const PK_BYTES: Record<MLDSAVariant, number> = {
-  'ML-DSA-44': 1312,
-  'ML-DSA-65': 1952,
-  'ML-DSA-87': 2592,
+  'ML-DSA-44': VARIANT_PARAMS['ML-DSA-44'].pkSize,
+  'ML-DSA-65': VARIANT_PARAMS['ML-DSA-65'].pkSize,
+  'ML-DSA-87': VARIANT_PARAMS['ML-DSA-87'].pkSize,
 };
 
 // ─── ACVP hashAlg → noble hash function ──────────────────────────────────────
@@ -107,18 +113,18 @@ export const PK_BYTES: Record<MLDSAVariant, number> = {
 // Every function passed to prehash() must therefore be wrapped with withOid().
 // These match the OIDs used in mldsa.ts (SHA-256/384/512 verified identical).
 // Source: NIST CSOR / RFC 5754 / FIPS 202 OID registry.
-const OID_SHA224     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04]);
-const OID_SHA256     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
-const OID_SHA384     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02]);
-const OID_SHA512     = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03]);
+const OID_SHA224 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x04]);
+const OID_SHA256 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01]);
+const OID_SHA384 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02]);
+const OID_SHA512 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03]);
 const OID_SHA512_224 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x05]);
 const OID_SHA512_256 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x06]);
-const OID_SHA3_224   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x07]);
-const OID_SHA3_256   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x08]);
-const OID_SHA3_384   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x09]);
-const OID_SHA3_512   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0a]);
-const OID_SHAKE128   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0b]);
-const OID_SHAKE256   = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0c]);
+const OID_SHA3_224 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x07]);
+const OID_SHA3_256 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x08]);
+const OID_SHA3_384 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x09]);
+const OID_SHA3_512 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0a]);
+const OID_SHAKE128 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0b]);
+const OID_SHAKE256 = new Uint8Array([0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0c]);
 
 function withOid<F extends (msg: Uint8Array) => Uint8Array>(fn: F, oid: Uint8Array): F & { oid: Uint8Array } {
   const wrapped = ((msg: Uint8Array) => fn(msg)) as F & { oid: Uint8Array };
@@ -141,12 +147,12 @@ function resolveHashFn(acvpHashAlg: string): { fn: any; label: string } | null {
   const n = acvpHashAlg.toUpperCase().replace(/[-_/\s]/g, '');
 
   // ── SHA-2 ─────────────────────────────────────────────────────────────────
-  if (n === 'SHA2224' || n === 'SHA224')        return { fn: withOid(sha224,     OID_SHA224),     label: 'SHA2-224' };
-  if (n === 'SHA2256' || n === 'SHA256')        return { fn: withOid(sha256,     OID_SHA256),     label: 'SHA2-256' };
-  if (n === 'SHA2384' || n === 'SHA384')        return { fn: withOid(sha384,     OID_SHA384),     label: 'SHA2-384' };
-  if (n === 'SHA2512' || n === 'SHA512')        return { fn: withOid(sha512,     OID_SHA512),     label: 'SHA2-512' };
-  if (n === 'SHA2512224' || n === 'SHA512224')  return { fn: withOid(sha512_224, OID_SHA512_224), label: 'SHA2-512/224' };
-  if (n === 'SHA2512256' || n === 'SHA512256')  return { fn: withOid(sha512_256, OID_SHA512_256), label: 'SHA2-512/256' };
+  if (n === 'SHA2224' || n === 'SHA224') return { fn: withOid(sha224, OID_SHA224), label: 'SHA2-224' };
+  if (n === 'SHA2256' || n === 'SHA256') return { fn: withOid(sha256, OID_SHA256), label: 'SHA2-256' };
+  if (n === 'SHA2384' || n === 'SHA384') return { fn: withOid(sha384, OID_SHA384), label: 'SHA2-384' };
+  if (n === 'SHA2512' || n === 'SHA512') return { fn: withOid(sha512, OID_SHA512), label: 'SHA2-512' };
+  if (n === 'SHA2512224' || n === 'SHA512224') return { fn: withOid(sha512_224, OID_SHA512_224), label: 'SHA2-512/224' };
+  if (n === 'SHA2512256' || n === 'SHA512256') return { fn: withOid(sha512_256, OID_SHA512_256), label: 'SHA2-512/256' };
 
   // ── SHA-3 ─────────────────────────────────────────────────────────────────
   if (n === 'SHA3224') return { fn: withOid(sha3_224, OID_SHA3_224), label: 'SHA3-224' };
@@ -317,25 +323,54 @@ export function parseExpectedResults(content: string): ExpectedResultsMap {
 
 export function parseRspFile(content: string): KatVector[] {
   const vectors: KatVector[] = [];
-  const blocks = content.split(/\n\s*\n/);
+  const lines = content.split('\n');
+  let currentVariant: MLDSAVariant | undefined;
+  let currentFields: Record<string, string> = {};
 
-  for (const block of blocks) {
-    if (!block.trim() || block.trim().startsWith('#')) continue;
-    const fields: Record<string, string> = {};
-    for (const line of block.split('\n')) {
-      const match = line.match(/^\s*(\w+)\s*=\s*(.+)$/);
-      if (match) fields[match[1].toLowerCase()] = match[2].trim();
+  const ALLOWED_VARIANTS: string[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+
+  const flush = () => {
+    const sigField = currentFields['sig'] ?? currentFields['sm'];
+    if (currentFields['pk'] && currentFields['msg'] && sigField) {
+      vectors.push({
+        tcId: parseInt(currentFields['count'] ?? '0', 10),
+        pk: currentFields['pk'],
+        message: currentFields['msg'],
+        signature: sigField,
+        parameterSet: currentVariant,
+        signatureInterface: 'internal',
+        _format: '__legacy_sm__',
+      });
     }
-    if (!fields['msg'] || !fields['pk'] || !fields['sm']) continue;
-    vectors.push({
-      tcId: parseInt(fields['count'] ?? '0', 10),
-      pk: fields['pk'],
-      message: fields['msg'],
-      signature: fields['sm'], // raw SM — runner splits at runtime
-      signatureInterface: 'internal',
-      _format: '__legacy_sm__',
-    });
+    currentFields = {};
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    // Variant header: [ML-DSA-44]
+    const headerMatch = trimmed.match(/^\[(ML-DSA-\d+)\]$/i);
+    if (headerMatch) {
+      const v = headerMatch[1].toUpperCase();
+      if (ALLOWED_VARIANTS.includes(v)) {
+        currentVariant = v as MLDSAVariant;
+      }
+      continue;
+    }
+
+    // Key-value pair: count = 0
+    const match = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
+    if (match) {
+      const key = match[1].toLowerCase();
+      // If we encounter a 'count' and already have fields, flush previous vector
+      if (key === 'count' && Object.keys(currentFields).length > 0) {
+        flush();
+      }
+      currentFields[key] = match[2].trim();
+    }
   }
+  flush(); // last one
   return vectors;
 }
 
@@ -373,10 +408,13 @@ export function parseSimpleJson(content: string): { vectors: KatVector[]; inferr
 // ─── Master parser ────────────────────────────────────────────────────────────
 
 export function parseKatFile(content: string, filename: string): { vectors: KatVector[]; inferredVariant?: MLDSAVariant } {
+  if (!content.trim()) throw new Error('Input is empty');
   const trimmed = content.trimStart();
-  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) {
+  // Robust check: ACVP JSON starts with [ { or { . RSP starts with [Section.
+  const isJson = trimmed.startsWith('{') || trimmed.startsWith('[{');
+
+  if (!isJson) {
     const vectors = parseRspFile(content);
-    if (vectors.length === 0) throw new Error('Parsed 0 vectors from .rsp file. Check the format.');
     return { vectors };
   }
   const parsed = JSON.parse(content);
@@ -436,6 +474,12 @@ export async function runKatVectors(
         expectedPassed = expectedResults.get(v.tgId)?.get(v.tcId);
       }
 
+      // ── "Internal" Interface / MLDSA Primitive mode ────────────────────
+      // When signatureInterface is "internal", ACVP is testing the raw
+      // MLDSA primitive (Step 7/8 of FIPS 204), meaning NO domain separation
+      // constructed at this layer. We call instance.internal.verify directly.
+      const isInternal = v.signatureInterface === 'internal' && !v.isExternalMu && v._format !== '__legacy_sm__';
+
       // ── Legacy .rsp SM mode ────────────────────────────────────────────
       if (v._format === '__legacy_sm__') {
         modeLabel = 'Legacy .rsp';
@@ -447,7 +491,7 @@ export async function runKatVectors(
           ? 'Signature extracted from SM field and verified (pure mode)'
           : 'SM verify failed — pre-FIPS 204 Dilithium vectors may not match ML-DSA spec';
 
-      // ── External μ mode ────────────────────────────────────────────────
+        // ── External μ mode ────────────────────────────────────────────────
       } else if (v.isExternalMu) {
         modeLabel = 'External μ';
         modesSet.add(modeLabel);
@@ -457,15 +501,26 @@ export async function runKatVectors(
         } catch { verifyOk = false; }
         note = verifyOk ? 'μ-based internal verify passed' : 'μ-based internal verify failed';
 
-      // ── HashML-DSA (preHash mode) ──────────────────────────────────────
-      // A vector is HashML-DSA when either:
-      //   1. preHash names a real hash ("preHash", "SHA2-256", etc.) — excludes "pure"/"none"/"".
-      //   2. signatureInterface="external" with NO preHash field at all — the only HashML-DSA
-      //      signal in simple-JSON format, which has no testGroup wrapper to carry preHash.
-      //      When preHash IS present (even as "pure"/"none"/""), cond 1 already covers the
-      //      real-hash case, so cond 2 must not fire — otherwise "pure" groups from an
-      //      external-interface ACVP testGroup would incorrectly enter this branch and be
-      //      skipped as "unknown hash" when hashAlg="none".
+        // ── MLDSA Primitive mode (internal interface) ──────────────────────
+      } else if (isInternal) {
+        modeLabel = 'MLDSA Primitive';
+        modesSet.add(modeLabel);
+        const sigBytesArr = strictHex(v.signature, 'signature');
+        try {
+          // Verify raw primitive directly, bypassing M' domain separation
+          verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes);
+        } catch { verifyOk = false; }
+        note = verifyOk ? 'Raw internal.verify passed (no domain separator)' : 'Raw internal.verify failed';
+
+        // ── HashML-DSA (preHash mode) ──────────────────────────────────────
+        // A vector is HashML-DSA when either:
+        //   1. preHash names a real hash ("preHash", "SHA2-256", etc.) — excludes "pure"/"none"/"".
+        //   2. signatureInterface="external" with NO preHash field at all — the only HashML-DSA
+        //      signal in simple-JSON format, which has no testGroup wrapper to carry preHash.
+        //      When preHash IS present (even as "pure"/"none"/""), cond 1 already covers the
+        //      real-hash case, so cond 2 must not fire — otherwise "pure" groups from an
+        //      external-interface ACVP testGroup would incorrectly enter this branch and be
+        //      skipped as "unknown hash" when hashAlg="none".
       } else if (
         (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) ||
         (v.signatureInterface === 'external' && !v.isExternalMu && v.preHash === undefined)
@@ -496,7 +551,7 @@ export async function runKatVectors(
             : `HashML-DSA verify failed (${resolved.label}${v.context ? ', with context' : ''})`;
         }
 
-      // ── Standard pure ML-DSA ───────────────────────────────────────────
+        // ── Standard pure ML-DSA ───────────────────────────────────────────
       } else {
         modeLabel = v.context ? 'Pure + Context' : 'Pure';
         modesSet.add(modeLabel);

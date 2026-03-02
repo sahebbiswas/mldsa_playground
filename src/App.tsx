@@ -477,8 +477,8 @@ export default function App() {
     setInspectContextRawHex(payload.contextRawHex || undefined);
     if (payload.hashAlg) setInspectHashAlg(payload.hashAlg);
     if (payload.showAdvanced) setShowAdvancedVerify(true);
-    setInspectPrimitive(false);
-    setInspectExternalMu(false);
+    setInspectPrimitive(!!payload.primitiveVerify);
+    setInspectExternalMu(!!payload.externalMu);
     setActiveTab('inspect');
     setResult(null);
   };
