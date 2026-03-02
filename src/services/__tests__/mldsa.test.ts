@@ -521,3 +521,114 @@ describe('testMalleability', () => {
         expect(results).toHaveLength(Math.ceil(sigLen / stride) * 8);
     });
 });
+
+// ─── New: primitiveVerify mode ────────────────────────────────────────────────
+
+describe('inspectSignature – primitiveVerify mode', () => {
+    it('verifies a signature produced by the raw noble internal primitive', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const instance = getMLDSAInstance('ML-DSA-44');
+        const pk = hexToUint8Array(publicKey);
+        const sk = hexToUint8Array(privateKey);
+        const msg = new TextEncoder().encode('primitive-test-message');
+
+        // Sign using the raw internal primitive (no M' domain separator)
+        const rawSig = (instance as any).internal.sign(msg, sk);
+        const rawSigHex = uint8ArrayToHex(rawSig);
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, rawSigHex, msg,
+            pureOpts({ primitiveVerify: true }),
+        );
+        expect(result.valid).toBe(true);
+        expect(result.primitiveVerify).toBe(true);
+        expect(result.externalMu).toBeUndefined();
+    });
+
+    it('rejects a standard FIPS 204 signature when primitiveVerify is enabled', async () => {
+        // A standard ML-DSA signature uses M' = [0x00, 0, ...msg], so it will fail
+        // when verified against the raw message via the primitive (different input).
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('standard-signed-message');
+        const sig = signMessage('ML-DSA-44', privateKey, msg, pureOpts());
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, sig, msg,
+            pureOpts({ primitiveVerify: true }),
+        );
+        expect(result.valid).toBe(false);
+    });
+
+    it('echoes primitiveVerify flag back in result and omits mPrimeHex', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const instance = getMLDSAInstance('ML-DSA-44');
+        const sk = hexToUint8Array(privateKey);
+        const msg = new TextEncoder().encode('echo-test');
+        const rawSigHex = uint8ArrayToHex((instance as any).internal.sign(msg, sk));
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, rawSigHex, msg,
+            pureOpts({ primitiveVerify: true }),
+        );
+        expect(result.primitiveVerify).toBe(true);
+        expect(result.components!.mPrimeHex).toBe('');
+        expect(result.components!.muHex).toHaveLength(128); // 64 bytes hex
+    });
+});
+
+// ─── New: externalMu mode ─────────────────────────────────────────────────────
+
+describe('inspectSignature – externalMu mode', () => {
+    it('verifies when mu is computed from a standard signed message', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('external-mu-message');
+        const sig = signMessage('ML-DSA-44', privateKey, msg, pureOpts());
+
+        // Compute mu the same way inspectSignature + buildMPrime does for pure mode
+        const { shake256: sha3shake256 } = await import('@noble/hashes/sha3.js');
+        const { concatBytes: concat } = await import('@noble/hashes/utils.js');
+
+        const pk = hexToUint8Array(publicKey);
+        const tr = sha3shake256(pk, { dkLen: 64 });
+        // pure mode M' = [0x00, 0x00, ...msg]  (context length = 0)
+        const mPrime = concat(new Uint8Array([0, 0]), msg);
+        const mu = sha3shake256(concat(tr, mPrime), { dkLen: 64 });
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, sig, mu,
+            pureOpts({ externalMu: true }),
+        );
+        expect(result.valid).toBe(true);
+        expect(result.externalMu).toBe(true);
+        expect(result.primitiveVerify).toBeUndefined();
+    });
+
+    it('fails with wrong mu value', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('message');
+        const sig = signMessage('ML-DSA-44', privateKey, msg, pureOpts());
+        const wrongMu = new Uint8Array(64).fill(0xab); // garbage mu
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, sig, wrongMu,
+            pureOpts({ externalMu: true }),
+        );
+        expect(result.valid).toBe(false);
+    });
+
+    it('echoes externalMu flag and sets mPrimeHex to empty', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('echo-mu');
+        const sig = signMessage('ML-DSA-44', privateKey, msg, pureOpts());
+
+        const result = await inspectSignature(
+            'ML-DSA-44', publicKey, sig, new Uint8Array(64),
+            pureOpts({ externalMu: true }),
+        );
+        expect(result.externalMu).toBe(true);
+        expect(result.components!.mPrimeHex).toBe('');
+        // muHex should reflect the passed-in mu (all zeros)
+        expect(result.components!.muHex).toBe('00'.repeat(64));
+    });
+});
+
