@@ -143,7 +143,8 @@ export default function App() {
   /** Raw hex context bytes from a KAT vector — takes priority over inspectContext in handleInspect. */
   const [inspectContextRawHex, setInspectContextRawHex] = useState<string | undefined>(undefined);
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
-  const [inspectLegacy, setInspectLegacy] = useState(false);
+  const [inspectPrimitive, setInspectPrimitive] = useState(false);
+  const [inspectExternalMu, setInspectExternalMu] = useState(false);
   const [isMessageBinary, setIsMessageBinary] = useState(false);
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
@@ -160,7 +161,9 @@ export default function App() {
     contextRawHex: inspectContextRawHex,
     hashAlg: inspectHashAlg,
     deterministic: false,
-  }), [inspectMode, inspectContext, inspectContextRawHex, inspectHashAlg]);
+    primitiveVerify: inspectPrimitive || undefined,
+    externalMu: inspectExternalMu || undefined,
+  }), [inspectMode, inspectContext, inspectContextRawHex, inspectHashAlg, inspectPrimitive, inspectExternalMu]);
 
   // Inspect binary import refs
   const inspectPubBinRef = useRef<HTMLInputElement>(null);
@@ -205,12 +208,12 @@ export default function App() {
       contextText: inspectContext,
       contextRawHex: inspectContextRawHex,
       hashAlg: inspectHashAlg,
-      checkLegacyMode: inspectLegacy,
-      // Verification is inherently deterministic; we thread this flag only for
-      // symmetry with the signing UI and potential future use.
       deterministic: false,
+      primitiveVerify: inspectPrimitive || undefined,
+      externalMu: inspectExternalMu || undefined,
     };
-    const msgInput = isMessageBinary ? hexToUint8Array(message) : message;
+    // In externalMu mode the message field always holds raw hex bytes (the μ value)
+    const msgInput = (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : message;
     const res = await inspectSignature(variant, publicKey, signature, msgInput, opts);
     setResult(res);
     setIsInspecting(false);
@@ -456,7 +459,8 @@ export default function App() {
     setInspectContextRawHex(undefined); // normal flow uses UTF-8 text context
     setInspectHashAlg(signHashAlg);
     if (signMode === 'hash-ml-dsa' || signContext) setShowAdvancedVerify(true);
-    setInspectLegacy(false);
+    setInspectPrimitive(false);
+    setInspectExternalMu(false);
     setActiveTab('inspect');
     setResult(null);
   };
@@ -473,12 +477,13 @@ export default function App() {
     setInspectContextRawHex(payload.contextRawHex || undefined);
     if (payload.hashAlg) setInspectHashAlg(payload.hashAlg);
     if (payload.showAdvanced) setShowAdvancedVerify(true);
-    setInspectLegacy(false);
+    setInspectPrimitive(false);
+    setInspectExternalMu(false);
     setActiveTab('inspect');
     setResult(null);
   };
 
-  
+
 
   // ── Shared UI sub-components ───────────────────────────────────────────────
 
@@ -503,15 +508,18 @@ export default function App() {
   /** Signing / Verify options panel (shared between sign + inspect tabs) */
   const AdvancedOptions = ({
     mode, onModeChange, context, onContextChange, hashAlg, onHashAlgChange, label,
-    inspectLegacy, onInspectLegacyChange,
+    primitiveVerify, onPrimitiveVerifyChange,
+    externalMu, onExternalMuChange,
     deterministic, onDeterministicChange,
   }: {
     mode: SignMode; onModeChange: (m: SignMode) => void;
     context: string; onContextChange: (c: string) => void;
     hashAlg: HashAlg; onHashAlgChange: (h: HashAlg) => void;
     label?: string;
-    inspectLegacy?: boolean;
-    onInspectLegacyChange?: (v: boolean) => void;
+    primitiveVerify?: boolean;
+    onPrimitiveVerifyChange?: (v: boolean) => void;
+    externalMu?: boolean;
+    onExternalMuChange?: (v: boolean) => void;
     deterministic?: boolean;
     onDeterministicChange?: (v: boolean) => void;
   }) => (
@@ -581,19 +589,55 @@ export default function App() {
         )}
       </div>
 
-      {/* Experimental Legacy Mode Checkbox - if props exist to toggle it */}
-      {onInspectLegacyChange && (
-        <label className="flex items-center gap-2 mt-4 pt-4 border-t border-[#141414]/10 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={!!inspectLegacy}
-            onChange={(e) => onInspectLegacyChange(e.target.checked)}
-            className="w-3 h-3 accent-[#141414]"
-          />
-          <span className="text-[10px] uppercase font-bold opacity-60">
-            Experimental: Test legacy CRYSTALS-Dilithium verification
-          </span>
-        </label>
+      {/* MLDSA Primitive / External MU options — inspector-only */}
+      {(onPrimitiveVerifyChange || onExternalMuChange) && (
+        <div className="space-y-3 pt-4 border-t border-[#141414]/10">
+          <p className="text-[9px] uppercase font-bold opacity-40 tracking-wider">MLDSA Internal Verification</p>
+
+          {onPrimitiveVerifyChange && (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!primitiveVerify}
+                onChange={(e) => {
+                  onPrimitiveVerifyChange(e.target.checked);
+                  // Primitive and externalMu are mutually exclusive
+                  if (e.target.checked && onExternalMuChange) onExternalMuChange(false);
+                }}
+                className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+              />
+              <div>
+                <span className="text-[10px] uppercase font-bold opacity-60 block">MLDSA Primitive Verification</span>
+                <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+                  Verify against the raw message with no M' domain separator or context string.
+                  Calls the internal primitive directly — useful for raw/non-FIPS implementations.
+                </span>
+              </div>
+            </label>
+          )}
+
+          {onExternalMuChange && (
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!!externalMu}
+                onChange={(e) => {
+                  onExternalMuChange(e.target.checked);
+                  // Primitive and externalMu are mutually exclusive
+                  if (e.target.checked && onPrimitiveVerifyChange) onPrimitiveVerifyChange(false);
+                }}
+                className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+              />
+              <div>
+                <span className="text-[10px] uppercase font-bold opacity-60 block">Specify μ (External MU)</span>
+                <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+                  Replace the message input with a 64-byte μ value. Calls internal.verify with externalMu=true.
+                  Use when your protocol pre-computes μ = SHAKE256(tr ∥ M') externally.
+                </span>
+              </div>
+            </label>
+          )}
+        </div>
       )}
 
       {/* Deterministic signing toggle, when provided */}
@@ -780,17 +824,18 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Message */}
+                  {/* Message / MU input */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
-                        <FileText size={14} /> Payload / Message
-                        {isMessageBinary && (
+                        <FileText size={14} />
+                        {inspectExternalMu ? 'μ (mu) — 64-byte hex' : 'Payload / Message'}
+                        {(isMessageBinary || inspectExternalMu) && (
                           <span className="ml-2 font-mono text-[9px] bg-violet-600 text-white px-1.5 py-0.5 rounded-sm">HEX</span>
                         )}
                         {message && (
                           <span className="ml-2 font-mono text-[9px] bg-[#141414]/10 text-[#141414] px-1.5 py-0.5 rounded-sm">
-                            {isMessageBinary
+                            {(isMessageBinary || inspectExternalMu)
                               ? Math.ceil(message.replace(/[^a-fA-F0-9]/g, '').length / 2)
                               : new TextEncoder().encode(message).length} bytes
                           </span>
@@ -800,22 +845,30 @@ export default function App() {
                         <TinyBtn onClick={() => { setIsMessageBinary(false); setMessage(''); setResult(null); }} className="opacity-60 hover:opacity-100">
                           Clear / Reset Text
                         </TinyBtn>
-                        <TinyBtn onClick={() => { setInspectImportError(null); inspectMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
-                          <Upload size={10} /> Import .bin
-                        </TinyBtn>
-                        <TinyBtn title="Save the current message as a raw binary .bin file" onClick={() => message && downloadBinary(`mldsa-message-inspect.bin`, isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message))} disabled={!message} className="opacity-60 hover:opacity-100">
+                        {!inspectExternalMu && (
+                          <TinyBtn onClick={() => { setInspectImportError(null); inspectMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
+                            <Upload size={10} /> Import .bin
+                          </TinyBtn>
+                        )}
+                        <TinyBtn title="Save the current message as a raw binary .bin file" onClick={() => message && downloadBinary(`mldsa-message-inspect.bin`, (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : new TextEncoder().encode(message))} disabled={!message} className="opacity-60 hover:opacity-100">
                           <Download size={10} /> Export .bin
                         </TinyBtn>
                       </ActionRow>
                     </div>
+                    {inspectExternalMu && (
+                      <p className="text-[9px] font-mono opacity-50 leading-relaxed">
+                        Enter the 64-byte μ as hex. μ = SHAKE256(tr ∥ M', dkLen=64) where tr = SHAKE256(pk, dkLen=64).
+                        The inspector result panel shows μ for each verification.
+                      </p>
+                    )}
                     <textarea
-                      title={isMessageBinary ? "Hex encoded binary message" : "Enter the exact message string that was signed"}
+                      title={inspectExternalMu ? 'Paste 64-byte mu (μ) as hex' : isMessageBinary ? 'Hex encoded binary message' : 'Enter the exact message string that was signed'}
                       value={message}
                       onChange={(e) => {
                         setMessage(e.target.value);
                         setResult(null);
                       }}
-                      placeholder={isMessageBinary ? "Paste hex-encoded binary message..." : "Enter the message that was signed..."}
+                      placeholder={inspectExternalMu ? 'Paste 64-byte μ (128 hex chars)...' : isMessageBinary ? 'Paste hex-encoded binary message...' : 'Enter the message that was signed...'}
                       className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                     />
                   </div>
@@ -836,8 +889,8 @@ export default function App() {
                       mode={inspectMode} onModeChange={setInspectMode}
                       context={inspectContext} onContextChange={(c) => { setInspectContext(c); setInspectContextRawHex(undefined); }}
                       hashAlg={inspectHashAlg} onHashAlgChange={setInspectHashAlg}
-                      // @ts-ignore - passing optional props for the legacy switch
-                      inspectLegacy={inspectLegacy} onInspectLegacyChange={setInspectLegacy}
+                      primitiveVerify={inspectPrimitive} onPrimitiveVerifyChange={setInspectPrimitive}
+                      externalMu={inspectExternalMu} onExternalMuChange={setInspectExternalMu}
                     />
                   )}
                   {inspectContextRawHex && (
@@ -855,13 +908,13 @@ export default function App() {
                 </div>
 
                 <button
-                  title="Run cryptographic ML-DSA algorithms to verify the signature"
+                  title={inspectPrimitive ? 'Verify using MLDSA internal primitive (no domain separator)' : inspectExternalMu ? 'Verify using externally-supplied μ (externalMu mode)' : 'Run cryptographic ML-DSA algorithms to verify the signature'}
                   onClick={handleInspect}
                   disabled={isInspecting || !publicKey || !signature || !message}
                   className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
                 >
                   {isInspecting ? <RefreshCw className="animate-spin" /> : <ChevronRight />}
-                  {isInspecting ? 'Analyzing...' : 'Inspect & Verify'}
+                  {isInspecting ? 'Analyzing...' : inspectPrimitive ? 'Inspect & Verify (Primitive)' : inspectExternalMu ? 'Inspect & Verify (External MU)' : 'Inspect & Verify'}
                 </button>
 
                 {/* ── Results ──────────────────────────────────────────────────── */}
@@ -891,11 +944,26 @@ export default function App() {
                               ? `Signature is cryptographically valid for the provided ${variant} public key.`
                               : result.error || 'Signature does not match the public key and message.'}
                           </p>
+                          {/* Primitive / ExternalMU mode badges */}
+                          {(result.primitiveVerify || result.externalMu) && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {result.primitiveVerify && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold border border-amber-400 text-amber-800 bg-amber-50">
+                                  <Cpu size={9} /> Primitive Mode
+                                </span>
+                              )}
+                              {result.externalMu && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold border border-blue-400 text-blue-800 bg-blue-50">
+                                  <Hash size={9} /> External μ
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Meta: mode, context, sizes */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-t border-[#141414]/10 pt-4 flex-wrap">
-                          {result.meta && (
+                          {result.meta && !result.primitiveVerify && !result.externalMu && (
                             <>
                               <div className="space-y-1 col-span-2 md:col-span-1">
                                 <span className="text-[9px] uppercase font-bold opacity-40">Mode</span>
@@ -960,28 +1028,38 @@ export default function App() {
                             <HexPreview label="Public Key Hash (tr) — 64 bytes" hex={result.components.trHex} bytes={64} />
                           </div>
 
-                          {/* Step 2: M' */}
-                          <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 2</span>
-                              <span className="text-[10px] font-mono opacity-70">
-                                {result.meta?.mode === 'hash-ml-dsa'
-                                  ? `M' = [0x01, ctx_len, ctx, OID(${result.meta.hashAlg}), ${result.meta.hashAlg}(msg)]`
-                                  : "M' = [0x00, ctx_len, ctx, msg]"}
-                              </span>
+                          {/* Step 2: M' — hidden in primitive/externalMu modes */}
+                          {!result.primitiveVerify && !result.externalMu && (
+                            <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 2</span>
+                                <span className="text-[10px] font-mono opacity-70">
+                                  {result.meta?.mode === 'hash-ml-dsa'
+                                    ? `M' = [0x01, ctx_len, ctx, OID(${result.meta.hashAlg}), ${result.meta.hashAlg}(msg)]`
+                                    : "M' = [0x00, ctx_len, ctx, msg]"}
+                                </span>
+                              </div>
+                              <HexPreview
+                                label={`M' — Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
+                                hex={result.components.mPrimeHex}
+                                bytes={Math.round(result.components.mPrimeHex.length / 2)}
+                              />
                             </div>
-                            <HexPreview
-                              label={`M' — Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
-                              hex={result.components.mPrimeHex}
-                              bytes={Math.round(result.components.mPrimeHex.length / 2)}
-                            />
-                          </div>
+                          )}
 
-                          {/* Step 3: μ */}
+                          {/* Step 3 (or Step 2 in primitive/externalMu): μ */}
                           <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                             <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 3</span>
-                              <span className="text-[10px] font-mono opacity-70">μ = SHAKE256(tr ∥ M', dkLen=64)</span>
+                              <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">
+                                {result.primitiveVerify || result.externalMu ? 'STEP 2' : 'STEP 3'}
+                              </span>
+                              <span className="text-[10px] font-mono opacity-70">
+                                {result.externalMu
+                                  ? 'μ = provided externally (externalMu mode)'
+                                  : result.primitiveVerify
+                                    ? 'μ = SHAKE256(tr ∥ msg, dkLen=64)  — no M\' prefix'
+                                    : 'μ = SHAKE256(tr ∥ M\', dkLen=64)'}
+                              </span>
                             </div>
                             <HexPreview label="Message Representative (μ) — 64 bytes" hex={result.components.muHex} bytes={64} />
                           </div>
@@ -1009,13 +1087,15 @@ export default function App() {
                             </div>
                           </div>
 
-                          {/* Step 5: library result */}
+                          {/* Final step: library result */}
                           <div className={cn(
                             'p-4 border space-y-2',
                             result.valid ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50',
                           )}>
                             <div className="flex items-center gap-2">
-                              <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 5</span>
+                              <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">
+                                {result.primitiveVerify || result.externalMu ? 'STEP 3' : 'STEP 5'}
+                              </span>
                               <span className="text-[10px] font-mono opacity-70">
                                 c̃' = SHAKE256(μ ∥ w₁Encode(w'₁)) — reconstructed via lattice math
                               </span>
@@ -1047,38 +1127,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Legacy Mode Extra Box */}
-                    {result.legacyValid !== undefined && (
-                      <div className={cn(
-                        'p-4 border space-y-3 mt-4',
-                        result.legacyValid ? 'border-orange-300 bg-orange-50' : 'border-[#141414]/10 bg-white',
-                      )}>
-                        <div className="flex items-center gap-2 border-b border-[#141414]/10 pb-2 mb-2">
-                          <Layers size={14} className={result.legacyValid ? 'text-orange-700' : 'opacity-40'} />
-                          <span className={cn('text-[10px] uppercase font-bold tracking-wider', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
-                            Legacy CRYSTALS-Dilithium Check
-                          </span>
-                        </div>
-
-                        <HexPreview
-                          label="Legacy μ = SHAKE256(tr ∥ msg)"
-                          hex={result.legacyMuHex || ''}
-                          bytes={64}
-                        />
-
-                        <div className="flex items-center gap-3 pt-2">
-                          {result.legacyValid
-                            ? <CheckCircle2 size={16} className="text-orange-600 shrink-0" />
-                            : <XCircle size={16} className="text-[#141414]/30 shrink-0" />
-                          }
-                          <p className={cn('text-xs font-mono', result.legacyValid ? 'text-orange-900' : 'opacity-60')}>
-                            {result.legacyValid
-                              ? 'Legacy Verification Successful. This signature was matched using the old Dilithium 2/3/5 standard formulation (no M\' context).'
-                              : 'Legacy Verification Failed. This is expected if the signature was generated under the final FIPS 204 standard.'}
-                          </p>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Signature Analysis Panel — structural decoder, norm checker, malleability tester */}
                     <SignatureAnalysisPanel
@@ -1501,7 +1549,7 @@ export default function App() {
                 />
               </motion.div>
             )}
-                          
+
           </AnimatePresence>
 
           {/* KAT Validator — always mounted so run results survive tab switches */}

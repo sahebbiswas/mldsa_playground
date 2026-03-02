@@ -23,14 +23,27 @@ export interface SigningOptions {
    * This is wired through to noble's `extraEntropy: false` SigOpts flag.
    */
   deterministic?: boolean;
-  checkLegacyMode?: boolean; // experimental: also check against old CRYSTALS-Dilithium formulation
+  /**
+   * When true, verifies against the raw message bytes with no M' domain separator
+   * or context string (calls instance.internal.verify directly).
+   * Useful for testing signatures produced by raw/primitive MLDSA implementations.
+   */
+  primitiveVerify?: boolean;
+  /**
+   * When true, treats the supplied message as a pre-computed 64-byte μ value
+   * and calls instance.internal.verify with { externalMu: true }.
+   * Used for protocols that compute μ externally.
+   */
+  externalMu?: boolean;
 }
 
 export interface InspectionResult {
   valid: boolean;
   error?: string;
-  legacyValid?: boolean;
-  legacyMuHex?: string;
+  /** Echoes back the verify mode used — set when primitiveVerify was requested. */
+  primitiveVerify?: boolean;
+  /** Echoes back whether externalMu mode was used. */
+  externalMu?: boolean;
   meta?: {
     mode: SignMode;
     hashAlg?: HashAlg;
@@ -44,9 +57,9 @@ export interface InspectionResult {
   components?: {
     challengeByteLen: number;
     challengeHex: string;  // c̃ – first N bytes of signature
-    mPrimeHex: string;  // M' as constructed per FIPS 204
+    mPrimeHex: string;  // M' as constructed per FIPS 204 (empty in primitive/externalMu modes)
     trHex: string;  // tr  = SHAKE256(pk,  dkLen=64)
-    muHex: string;  // μ   = SHAKE256(tr ∥ M', dkLen=64)
+    muHex: string;  // μ   = SHAKE256(tr ∥ M', dkLen=64), or directly provided mu
     zPreviewHex: string;  // 32-byte preview of z region
     hPreviewHex: string;  // 32-byte preview of h region (tail)
     reconstructedChallengeHex?: string; // c̃' = SHAKE256(μ ∥ w₁Encode(w'₁))
@@ -156,14 +169,11 @@ export const inspectSignature = async (
     const challengeByteLen = C_TILDE_BYTES[variant];
 
     // Intercept Keccak.prototype.digest to capture the reconstructed challenge (cTilde')
-    // We can't patch shake256.create because it's a frozen property in ESM/noble.
     const originalDigest = Keccak.prototype.digest;
     let capturedDigest: Uint8Array | undefined;
 
     Keccak.prototype.digest = function () {
       const res = originalDigest.apply(this);
-      // Captured digest should be the size of the challenge/commitment hash (lambda/8)
-      // and it's usually the one called internally by verify() at the end.
       if ((this as any).outputLen === challengeByteLen) {
         capturedDigest = res;
       }
@@ -171,7 +181,13 @@ export const inspectSignature = async (
     };
 
     try {
-      if (opts.mode === 'pure') {
+      if (opts.primitiveVerify) {
+        // ── Primitive verify: raw message, no M' domain separator, no context ──
+        isValid = (instance as any).internal.verify(sig, msg, pk);
+      } else if (opts.externalMu) {
+        // ── External MU: caller supplies a pre-computed 64-byte μ directly ──
+        isValid = (instance as any).internal.verify(sig, msg, pk, { externalMu: true });
+      } else if (opts.mode === 'pure') {
         isValid = instance.verify(sig, msg, pk, { context: contextBytes.length ? contextBytes : undefined });
       } else {
         const hashFn = HASH_FNS[opts.hashAlg!];
@@ -186,35 +202,30 @@ export const inspectSignature = async (
       Keccak.prototype.digest = originalDigest;
     }
 
-    // ── Experimental Legacy Check ──────────────────────────────────────────
-    let legacyValid: boolean | undefined;
-    let legacyMuHex: string | undefined;
-
     // tr = SHAKE256(pk, dkLen=64)
     const tr = shake256(pk, { dkLen: 64 });
     const trHex = uint8ArrayToHex(tr);
 
-    if (opts.checkLegacyMode) {
-      // Legacy CRYSTALS-Dilithium did not prepend M' prefixes or contexts.
-      // μ = SHAKE256(tr || msg)
-      const legacyMu = shake256(concatBytes(tr, msg), { dkLen: 64 });
-      legacyMuHex = uint8ArrayToHex(legacyMu);
+    // ── M' and μ reconstruction ───────────────────────────────────────────────
+    let mPrimeHex: string;
+    let muHex: string;
 
-      try {
-        // internal.verify allows externalMu to bypass getMessage()
-        legacyValid = (instance as any).internal.verify(sig, legacyMu, pk, { externalMu: true });
-      } catch (e) {
-        legacyValid = false;
-      }
+    if (opts.externalMu) {
+      // μ was supplied directly as `msg` — no M' construction
+      mPrimeHex = '';
+      muHex = uint8ArrayToHex(msg);
+    } else if (opts.primitiveVerify) {
+      // Primitive mode: μ = SHAKE256(tr ∥ msg), no M' prefix
+      mPrimeHex = '';
+      const mu = shake256(concatBytes(tr, msg), { dkLen: 64 });
+      muHex = uint8ArrayToHex(mu);
+    } else {
+      // Standard FIPS 204: M' = [domain, ctx_len, ctx, ...msg_or_hash]
+      const mPrime = buildMPrime(opts.mode, contextBytes, msg, opts.hashAlg);
+      mPrimeHex = uint8ArrayToHex(mPrime);
+      const mu = shake256(concatBytes(tr, mPrime), { dkLen: 64 });
+      muHex = uint8ArrayToHex(mu);
     }
-
-    // M' reconstruction
-    const mPrime = buildMPrime(opts.mode, contextBytes, msg, opts.hashAlg);
-    const mPrimeHex = uint8ArrayToHex(mPrime);
-
-    // μ = SHAKE256(tr ∥ M', dkLen=64)
-    const mu = shake256(concatBytes(tr, mPrime), { dkLen: 64 });
-    const muHex = uint8ArrayToHex(mu);
 
     // ── SHAKE256 reconstruction metadata ─────────────────────────────────────
     const challengeHex = sig.length >= challengeByteLen
@@ -229,8 +240,8 @@ export const inspectSignature = async (
 
     return {
       valid: isValid,
-      legacyValid,
-      legacyMuHex,
+      primitiveVerify: opts.primitiveVerify || undefined,
+      externalMu: opts.externalMu || undefined,
       meta: {
         mode: opts.mode,
         hashAlg: opts.mode === 'hash-ml-dsa' ? opts.hashAlg : undefined,
@@ -324,9 +335,9 @@ export interface VariantParams {
 }
 
 export const VARIANT_PARAMS: Record<MLDSAVariant, VariantParams> = {
-  'ML-DSA-44': { lambda:128, k:4,  l:4,  gamma1:1<<17, gamma2:95232,  beta:78,  omega:80, tau:39, eta:2, z_bits:18, t1_bits:10, sigBytes:2420,  pkBytes:1312,  skBytes:2560  },
-  'ML-DSA-65': { lambda:192, k:6,  l:5,  gamma1:1<<19, gamma2:261888, beta:196, omega:55, tau:49, eta:4, z_bits:20, t1_bits:10, sigBytes:3309,  pkBytes:1952,  skBytes:4032  },
-  'ML-DSA-87': { lambda:256, k:8,  l:7,  gamma1:1<<19, gamma2:261888, beta:120, omega:75, tau:60, eta:2, z_bits:20, t1_bits:10, sigBytes:4627,  pkBytes:2592,  skBytes:4896  },
+  'ML-DSA-44': { lambda: 128, k: 4, l: 4, gamma1: 1 << 17, gamma2: 95232, beta: 78, omega: 80, tau: 39, eta: 2, z_bits: 18, t1_bits: 10, sigBytes: 2420, pkBytes: 1312, skBytes: 2560 },
+  'ML-DSA-65': { lambda: 192, k: 6, l: 5, gamma1: 1 << 19, gamma2: 261888, beta: 196, omega: 55, tau: 49, eta: 4, z_bits: 20, t1_bits: 10, sigBytes: 3309, pkBytes: 1952, skBytes: 4032 },
+  'ML-DSA-87': { lambda: 256, k: 8, l: 7, gamma1: 1 << 19, gamma2: 261888, beta: 120, omega: 75, tau: 60, eta: 2, z_bits: 20, t1_bits: 10, sigBytes: 4627, pkBytes: 2592, skBytes: 4896 },
 };
 
 // ─── Bit-unpacking helpers ───────────────────────────────────────────────────
