@@ -3,7 +3,7 @@ import {
     parseKatFile,
     parseExpectedResults,
     runKatVectors,
-    VARIANT_PARAMS,
+    KAT_VARIANT_SIZES,
     SIG_BYTES,
     PK_BYTES,
     KatVector,
@@ -83,17 +83,19 @@ function makeTc(variant: MLDSAVariant, overrides: Record<string, unknown> = {}):
 // ─── SIG_BYTES / PK_BYTES ─────────────────────────────────────────────────────
 
 describe('SIG_BYTES / PK_BYTES constants', () => {
-    it('ML-DSA-44 values match VARIANT_PARAMS', () => {
-        expect(SIG_BYTES['ML-DSA-44']).toBe(VARIANT_PARAMS['ML-DSA-44'].sigSize);
-        expect(PK_BYTES['ML-DSA-44']).toBe(VARIANT_PARAMS['ML-DSA-44'].pkSize);
+    it('ML-DSA-44 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-44']).toBe(KAT_VARIANT_SIZES['ML-DSA-44'].sigBytes);
+        expect(PK_BYTES['ML-DSA-44']).toBe(KAT_VARIANT_SIZES['ML-DSA-44'].pkBytes);
     });
-    it('ML-DSA-65 values match VARIANT_PARAMS', () => {
-        expect(SIG_BYTES['ML-DSA-65']).toBe(VARIANT_PARAMS['ML-DSA-65'].sigSize);
-        expect(PK_BYTES['ML-DSA-65']).toBe(VARIANT_PARAMS['ML-DSA-65'].pkSize);
+
+    it('ML-DSA-65 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-65']).toBe(KAT_VARIANT_SIZES['ML-DSA-65'].sigBytes);
+        expect(PK_BYTES['ML-DSA-65']).toBe(KAT_VARIANT_SIZES['ML-DSA-65'].pkBytes);
     });
-    it('ML-DSA-87 values match VARIANT_PARAMS', () => {
-        expect(SIG_BYTES['ML-DSA-87']).toBe(VARIANT_PARAMS['ML-DSA-87'].sigSize);
-        expect(PK_BYTES['ML-DSA-87']).toBe(VARIANT_PARAMS['ML-DSA-87'].pkSize);
+
+    it('ML-DSA-87 values match KAT_VARIANT_SIZES', () => {
+        expect(SIG_BYTES['ML-DSA-87']).toBe(KAT_VARIANT_SIZES['ML-DSA-87'].sigBytes);
+        expect(PK_BYTES['ML-DSA-87']).toBe(KAT_VARIANT_SIZES['ML-DSA-87'].pkBytes);
     });
 });
 
@@ -233,7 +235,7 @@ sig = FFFF
     });
 
     it('returns empty array for input with no parseable blocks', () => {
-        const { vectors } = parseKatFile('just some text');
+        const { vectors } = parseKatFile('just some text', 'test.kat');
         expect(vectors).toHaveLength(0);
     });
 });
@@ -257,7 +259,7 @@ describe('parseSimpleJson', () => {
     });
 
     it('throws on empty vectors array', () => {
-        expect(() => parseKatFile('{"vectors":[]}')).toThrow(/empty/i);
+        expect(() => parseKatFile('{"vectors":[]}', 'test.json')).toThrow(/empty/i);
     });
 
     it('accepts msg as alias for message', () => {
@@ -273,7 +275,7 @@ describe('parseSimpleJson', () => {
 
 describe('parseKatFile', () => {
     it('routes non-JSON to parseRspFile', () => {
-        const { vectors } = parseKatFile('[ML-DSA-44]\npk=1\nmsg=2\nsig=3');
+        const { vectors } = parseKatFile('[ML-DSA-44]\npk=1\nmsg=2\nsig=3', 'test.kat');
         expect(vectors[0].pk).toBe('1');
     });
     it('routes ACVP JSON to parseAcvpJson', () => {

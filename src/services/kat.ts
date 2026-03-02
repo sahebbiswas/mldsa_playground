@@ -84,22 +84,22 @@ export type ExpectedResultsMap = Map<number, Map<number, boolean>>;
 
 // ─── Sizes ────────────────────────────────────────────────────────────────────
 
-export const VARIANT_PARAMS: Record<MLDSAVariant, { pkSize: number; sigSize: number }> = {
-  'ML-DSA-44': { pkSize: 1312, sigSize: 2420 },
-  'ML-DSA-65': { pkSize: 1952, sigSize: 3309 },
-  'ML-DSA-87': { pkSize: 2592, sigSize: 4627 },
+export const KAT_VARIANT_SIZES: Record<MLDSAVariant, { pkBytes: number; sigBytes: number }> = {
+  'ML-DSA-44': { pkBytes: 1312, sigBytes: 2420 },
+  'ML-DSA-65': { pkBytes: 1952, sigBytes: 3309 },
+  'ML-DSA-87': { pkBytes: 2592, sigBytes: 4627 },
 };
 
 export const SIG_BYTES: Record<MLDSAVariant, number> = {
-  'ML-DSA-44': VARIANT_PARAMS['ML-DSA-44'].sigSize,
-  'ML-DSA-65': VARIANT_PARAMS['ML-DSA-65'].sigSize,
-  'ML-DSA-87': VARIANT_PARAMS['ML-DSA-87'].sigSize,
+  'ML-DSA-44': KAT_VARIANT_SIZES['ML-DSA-44'].sigBytes,
+  'ML-DSA-65': KAT_VARIANT_SIZES['ML-DSA-65'].sigBytes,
+  'ML-DSA-87': KAT_VARIANT_SIZES['ML-DSA-87'].sigBytes,
 };
 
 export const PK_BYTES: Record<MLDSAVariant, number> = {
-  'ML-DSA-44': VARIANT_PARAMS['ML-DSA-44'].pkSize,
-  'ML-DSA-65': VARIANT_PARAMS['ML-DSA-65'].pkSize,
-  'ML-DSA-87': VARIANT_PARAMS['ML-DSA-87'].pkSize,
+  'ML-DSA-44': KAT_VARIANT_SIZES['ML-DSA-44'].pkBytes,
+  'ML-DSA-65': KAT_VARIANT_SIZES['ML-DSA-65'].pkBytes,
+  'ML-DSA-87': KAT_VARIANT_SIZES['ML-DSA-87'].pkBytes,
 };
 
 // ─── ACVP hashAlg → noble hash function ──────────────────────────────────────
