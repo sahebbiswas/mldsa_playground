@@ -12,7 +12,7 @@ A web-based interactive utility for exploring and verifying Post-Quantum Digital
 - **Context Strings:** Full support for FIPS 204 context strings (up to 255 bytes), including raw binary context (`contextRawHex`) for ACVP KAT interop.
 - **Binary Payload Support:** Import/export raw `.bin` files for keys, signatures, and messages in both signing and verification.
 - **X.509 Certificates:** Drag-and-drop X.509 certificates (DER, PEM) to parse and cryptographically verify embedded ML-DSA signatures. Extracts Subject, Issuer, Validity, algorithm OID, and embedded public key.
-- **KAT Validator:** Run official NIST ACVP test vectors directly in the browser against the live implementation. Supports all FIPS 204 signing interfaces (Pure, HashML-DSA, External μ) and all ACVP-defined hash algorithms. Load an optional `expectedResults.json` companion file to compare against NIST's expected outcomes. Run state is fully preserved when switching tabs.
+- **KAT Validator:** Run official NIST ACVP test vectors directly in the browser against the live implementation. Supports all FIPS 204 signing interfaces (Pure, HashML-DSA, External μ) and **KeyGen deterministic testing** (seed → pk/sk). Load an optional `expectedResults.json` companion file to compare against NIST's expected outcomes (including Public/Secret Key equality). Run state is fully preserved when switching tabs.
 - **Deep Inspection:** Step-by-step SHAKE256 cryptographic reconstruction panel showing how the commitment hash c̃ is derived from inputs per FIPS 204 (tr, M′, μ, c̃, c̃′).
 - **🔬 Deeper Signature Analysis:** Three collapsible panels rendered after any verification:
   - *Signature Component Decoder* — byte-layout map of the c̃ / z / h regions with offsets, sizes, a proportional visual bar, full c̃ hex, and per-polynomial hint counts.
@@ -105,7 +105,7 @@ Rendered at the bottom of the result card after any verification run:
 
 ### 5. KAT Validator
 
-Runs official NIST ACVP test vectors against the live ML-DSA implementation in the browser. All run results persist when you switch to other tabs, so you can investigate vectors via **Send to Inspector** and return without re-running.
+Runs official NIST ACVP test vectors against the live ML-DSA implementation in the browser. Supports both **Signature Verification (SigVer)** and **Key Generation (KeyGen)** vector sets. All run results persist when you switch to other tabs, so you can investigate vectors via **Send to Inspector** (for SigVer) and return without re-running.
 
 **Getting test vectors:**
 1. Visit [usnistgov/ACVP-Server](https://github.com/usnistgov/ACVP-Server) on GitHub.
@@ -116,8 +116,8 @@ Runs official NIST ACVP test vectors against the live ML-DSA implementation in t
 1. Navigate to the **KAT Validator** tab.
 2. Set **Max Vectors** (e.g. 25 to start — full ACVP files contain hundreds of vectors).
 3. Drop or upload `internalProjection.json` (or a legacy `.rsp` file). Each test vector's variant is read from its `parameterSet` field; use **Advanced → Fallback Variant** only if detection fails.
-4. *(Optional)* Expand **Advanced** and load `expectedResults.json` for NIST comparison.
-5. Results appear immediately. Each row shows test case ID, a pass/fail/skip badge, the signing interface mode, the ML-DSA variant used for that vector, and — if expected results are loaded — a match/mismatch indicator.
+4. *(Optional)* Expand **Advanced** and load `expectedResults.json` for NIST comparison. For KeyGen vectors, the validator compares your implementation's generated `pk` and `sk` against those in the results file.
+5. Results appear immediately. Each row shows test case ID, a pass/fail/skip badge, the mode (Pure, Hash, KeyGen, etc.), the ML-DSA variant used for that vector, and — if expected results are loaded — a match/mismatch indicator (`✓` for match, `≠` for mismatch).
 
 **Understanding result badges:**
 
@@ -138,8 +138,9 @@ Rows mismatching `expectedResults.json` are highlighted orange. Use the **Show N
 |---|---|
 | Pure | Standard `ML-DSA.Verify()` |
 | Pure + Context | Pure ML-DSA with a binary context string |
-| HashML-DSA | Pre-hashed message; SHA2-224/256/384/512, SHA2-512/224, SHA2-512/256, SHA3-224/256/384/512, SHAKE-128, SHAKE-256 |
+| HashML-DSA | Pre-hashed message; SHA2-224/SHA256/384/512, etc. |
 | External μ | Pre-computed μ verified via `internal.verify(externalMu: true)` |
+| KeyGen | Deterministic key generation: `seed` → `pk` (+ `sk`) |
 | Legacy .rsp | Pre-FIPS 204 Dilithium format with `SM = signature ‖ message` |
 
 **Note:** `preHash = "none"` in an ACVP test group is treated identically to `"pure"` — it runs as standard pure ML-DSA, not as a hash-mode vector with an unknown algorithm.
