@@ -111,7 +111,7 @@ function VerifyPill({ ok, skipped, correctRejection }: { ok: boolean; skipped?: 
   );
 }
 
-function ExpectedPill({ expected, matches }: { expected: boolean; matches: boolean }) {
+function ExpectedPill({ expected, matches }: { expected: boolean | undefined; matches: boolean }) {
   return (
     <span className={cn(
       'inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold rounded-sm border',
@@ -120,7 +120,7 @@ function ExpectedPill({ expected, matches }: { expected: boolean; matches: boole
         : 'border-orange-400 text-orange-700 bg-orange-50',
     )}>
       {matches ? <CheckCircle2 size={9} /> : <AlertTriangle size={9} />}
-      exp:{expected ? 'P' : 'F'} {matches ? '✓' : '≠'}
+      exp:{expected === undefined ? 'K' : (expected ? 'P' : 'F')} {matches ? '✓' : '≠'}
     </span>
   );
 }
@@ -131,6 +131,7 @@ const ModePill: React.FC<{ mode: string }> = ({ mode }) => {
   const isPreHashUnknown = mode.includes('PreHash');
   const isExtMu = mode.includes('External');
   const isCtx = mode.includes('Context');
+  const isKeyGen = mode.includes('KeyGen');
   return (
     <span className={cn(
       'inline-flex items-center px-2 py-0.5 text-[9px] font-mono border whitespace-nowrap',
@@ -138,8 +139,9 @@ const ModePill: React.FC<{ mode: string }> = ({ mode }) => {
         isPreHash ? 'border-violet-400 text-violet-700 bg-violet-50' :
           isPreHashUnknown ? 'border-red-300 text-red-600 bg-red-50' :
             isExtMu ? 'border-blue-300 text-blue-700 bg-blue-50' :
-              isCtx ? 'border-[#141414]/30 text-[#141414]/70' :
-                'border-[#141414]/20 text-[#141414]/50',
+              isKeyGen ? 'border-emerald-400 text-emerald-700 bg-emerald-50' :
+                isCtx ? 'border-[#141414]/30 text-[#141414]/70' :
+                  'border-[#141414]/20 text-[#141414]/50',
     )}>
       {mode}
     </span>
@@ -218,6 +220,7 @@ const MODE_TOOLTIPS: Record<string, string> = {
   'MLDSA Primitive': 'Raw MLDSA primitive (internal interface). No M\' construction or domain separation.',
   'External μ': 'The message representative μ is provided pre-computed. Noble verifies via internal.verify() with externalMu:true, bypassing M\' construction.',
   'Legacy .rsp': 'Pre-FIPS 204 Dilithium format. SM field = signature ‖ message concatenated. These vectors may not match the final FIPS 204 spec.',
+  'KeyGen': 'Deterministic key generation from the provided seed. Generates pk (and optionally sk) and compares them with the vector\'s expected values.',
   'Error': 'An exception was thrown during verification.',
 };
 
@@ -234,18 +237,25 @@ function getModeTooltip(mode: string) {
   return mode;
 }
 
-function HexField({ label, hex, tooltip }: { label: string; hex: string; tooltip?: string }) {
+function HexField({ label, hex, tooltip, variant = 'default' }: { label: string; hex: string; tooltip?: string; variant?: 'default' | 'error' }) {
   const bytes = Math.floor(hex.length / 2);
+  const isError = variant === 'error';
   return (
     <div className="space-y-0.5">
       <div className="flex justify-between items-center">
-        <span className="flex items-center gap-1 text-[9px] uppercase font-bold opacity-40 tracking-wider">
+        <span className={cn(
+          "flex items-center gap-1 text-[9px] uppercase font-bold tracking-wider",
+          isError ? "text-red-600 opacity-80" : "opacity-40"
+        )}>
           {label}
           {tooltip && <Tip text={tooltip} />}
         </span>
         <span className="text-[9px] font-mono opacity-30">{bytes}B</span>
       </div>
-      <div className="p-2 bg-[#141414]/5 font-mono text-[10px] break-all border border-[#141414]/10 leading-relaxed max-h-14 overflow-y-auto">
+      <div className={cn(
+        "p-2 font-mono text-[10px] break-all border leading-relaxed max-h-14 overflow-y-auto",
+        isError ? "bg-red-50 border-red-200 text-red-900" : "bg-[#141414]/5 border-[#141414]/10"
+      )}>
         {hex || <span className="opacity-30 italic">—</span>}
       </div>
     </div>
@@ -255,14 +265,14 @@ function HexField({ label, hex, tooltip }: { label: string; hex: string; tooltip
 const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToInspector: (p: SendToInspectorPayload) => void }> = ({ v, variant, onSendToInspector }) => {
   const [open, setOpen] = useState(false);
   const isSkipped = v.modeLabel.startsWith('PreHash (') || v.modeLabel === 'Error';
-  const hasExpected = v.expectedPassed !== undefined;
+  const hasExpected = v.expectedPassed !== undefined || !!v.expectedPk;
   const isCorrectRejection = !v.verifyOk && v.expectedPassed === false && v.matchesExpected === true;
 
   return (
     <div className={cn(
       'border-b border-[#141414]/10 last:border-0',
       !v.effectivePass && !isSkipped && 'bg-red-50/60',
-      hasExpected && v.matchesExpected === false && 'border-l-2 border-l-orange-400',
+      v.matchesExpected === false && 'border-l-2 border-l-orange-400',
     )}>
       <button
         type="button"
@@ -283,13 +293,13 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
           {variant}
         </span>
 
-        {hasExpected && (
+        {v.matchesExpected !== undefined && (
           <span className="flex items-center gap-1">
-            <ExpectedPill expected={v.expectedPassed!} matches={v.matchesExpected!} />
+            <ExpectedPill expected={v.expectedPassed} matches={v.matchesExpected!} />
             <Tip text={
               v.matchesExpected
-                ? `Result matches expectedResults.json (expected: ${v.expectedPassed ? 'pass' : 'fail'})`
-                : `MISMATCH: we got ${v.verifyOk ? 'pass' : 'fail'} but expected ${v.expectedPassed ? 'pass' : 'fail'}`
+                ? `Result matches expectedResults.json (expected: ${v.expectedPassed !== undefined ? (v.expectedPassed ? 'pass' : 'fail') : 'KeyGen match'})`
+                : `MISMATCH: we got ${v.verifyOk ? 'pass' : 'fail'} but expected ${v.expectedPassed !== undefined ? (v.expectedPassed ? 'pass' : 'fail') : 'KeyGen match'}`
             } />
           </span>
         )}
@@ -316,7 +326,7 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
               )}
 
               {/* Send to Inspector (MOVED TO TOP) */}
-              {(() => {
+              {!v.seed && (() => {
                 const payload = buildInspectorPayload(v, variant);
                 const unsupportedHash = payload.mode === 'hash-ml-dsa' && !payload.hashAlg;
                 return (
@@ -339,22 +349,46 @@ const VectorRow: React.FC<{ v: KatVectorResult; variant: MLDSAVariant; onSendToI
                 );
               })()}
 
+              {v.seed && (
+                <HexField label="Seed" hex={v.seed} tooltip="Seed used for deterministic key generation." />
+              )}
+
               <HexField label="Public Key" hex={v.pk}
                 tooltip="The ML-DSA public key used to verify the signature. Size: 1312B (44), 1952B (65), or 2592B (87)." />
-              <HexField
-                label={v.isExternalMu ? 'μ (pre-computed message representative)' : 'Message'}
-                hex={v.message}
-                tooltip={v.isExternalMu
-                  ? 'Pre-computed μ = SHAKE256(tr ‖ M′, 64). Passed directly to the internal verifier, skipping M′ construction.'
-                  : v.preHash && v.preHash !== 'pure'
-                    ? `Raw message before pre-hashing. The verifier will compute ${v.hashAlg ?? 'hash'}(message) internally before verifying.`
-                    : 'The exact byte sequence that was signed. For pure ML-DSA this is passed directly into M′ construction.'}
-              />
-              <HexField label="Signature" hex={v._format === '__legacy_sm__' ? v.signature.slice(0, SIG_PREVIEW_LEN) + '…' : v.signature}
-                tooltip={v._format === '__legacy_sm__'
-                  ? 'Raw SM field from .rsp file. Contains signature ‖ message concatenated. The first N bytes are extracted as the signature.'
-                  : `Detached ML-DSA signature. Size: 2420B (44), 3309B (65), or 4627B (87).`}
-              />
+
+              {v.sk && (
+                <HexField label="Secret Key" hex={v.sk} tooltip="The ML-DSA secret key generated from the seed." />
+              )}
+
+              {v.expectedPk && v.expectedPk.toLowerCase() !== v.pk.toLowerCase() && (
+                <HexField label="Expected Public Key" hex={v.expectedPk} variant="error" tooltip="The Public Key expected by the loaded results file." />
+              )}
+
+              {v.expectedSk && v.sk && v.expectedSk.toLowerCase() !== v.sk.toLowerCase() && (
+                <HexField label="Expected Secret Key" hex={v.expectedSk} variant="error" tooltip="The Secret Key expected by the loaded results file." />
+              )}
+
+              {!v.seed && (
+                <HexField
+                  label={v.isExternalMu ? 'μ (pre-computed message representative)' : 'Message'}
+                  hex={v.message}
+                  tooltip={v.isExternalMu
+                    ? 'Pre-computed μ = SHAKE256(tr ‖ M′, 64). Passed directly to the internal verifier, skipping M′ construction.'
+                    : v.preHash && v.preHash !== 'pure'
+                      ? `Raw message before pre-hashing. The verifier will compute ${v.hashAlg ?? 'hash'}(message) internally before verifying.`
+                      : 'The exact byte sequence that was signed. For pure ML-DSA this is passed directly into M′ construction.'}
+                />
+              )}
+              {!v.seed && (
+                <HexField label="Signature" hex={v._format === '__legacy_sm__' ? v.signature.slice(0, SIG_PREVIEW_LEN) + '…' : v.signature}
+                  tooltip={v._format === '__legacy_sm__'
+                    ? 'Raw SM field from .rsp file. Contains signature ‖ message concatenated. The first N bytes are extracted as the signature.'
+                    : `Detached ML-DSA signature. Size: 2420B (44), 3309B (65), or 4627B (87).`}
+                />
+              )}
+              {v.sk && (
+                <HexField label="Secret Key" hex={v.sk} tooltip="Expected secret key generated from the seed." />
+              )}
               {v.context && (
                 <HexField label="Context" hex={v.context}
                   tooltip="Optional context string (hex). Cryptographically bound to the signature via M′ construction: M′ = [0x00, ctx_len, ctx, msg]." />

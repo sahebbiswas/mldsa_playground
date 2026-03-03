@@ -21,7 +21,7 @@
 import { ml_dsa44, ml_dsa65, ml_dsa87 } from '@noble/post-quantum/ml-dsa.js';
 import { sha224, sha256, sha384, sha512, sha512_224, sha512_256 } from '@noble/hashes/sha2.js';
 import { sha3_224, sha3_256, sha3_384, sha3_512, shake128, shake256 } from '@noble/hashes/sha3.js';
-import { MLDSAVariant, hexToUint8Array } from './mldsa';
+import { MLDSAVariant, hexToUint8Array, uint8ArrayToHex } from './mldsa';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,6 +49,12 @@ export interface KatVector {
   parameterSet?: MLDSAVariant;
   /** Internal tag: '__legacy_sm__' for .rsp format vectors */
   _format?: string;
+  /** Seed for KeyGen (hex) */
+  seed?: string;
+  /** Secret key for KeyGen (hex) */
+  sk?: string;
+  /** ACVP testType e.g. 'AFT', 'keyGen' */
+  testType?: string;
 }
 
 export type KatVectorResult = KatVector & {
@@ -57,10 +63,15 @@ export type KatVectorResult = KatVector & {
    *  - crypto verify returned true, OR
    *  - expectedResults says fail AND we also got fail (correct rejection) */
   effectivePass: boolean;
-  /** Expected result from an accompanying expectedResults.json, if loaded */
+  /** Expected result from an accompanying expectedResults.json, if loaded.
+   *  For SigVer: boolean (passed/failed).
+   *  For KeyGen: boolean (usually not present, but matchesExpected will be used). */
   expectedPassed?: boolean;
   /** Whether our result matches the expected result */
   matchesExpected?: boolean;
+  /** For KeyGen: expected values from expectedResults.json */
+  expectedPk?: string;
+  expectedSk?: string;
   modeLabel: string;
   note: string;
   error?: string;
@@ -79,8 +90,8 @@ export interface KatRunResult {
   modesPresent: string[];
 }
 
-/** Parsed expectedResults.json — maps tgId → tcId → testPassed */
-export type ExpectedResultsMap = Map<number, Map<number, boolean>>;
+/** Parsed expectedResults.json — maps tgId → tcId → (boolean | {pk, sk}) */
+export type ExpectedResultsMap = Map<number, Map<number, boolean | { pk: string; sk?: string }>>;
 
 // ─── Sizes ────────────────────────────────────────────────────────────────────
 
@@ -202,9 +213,14 @@ interface AcvpTestCase {
   pk?: string;
   message?: string;
   mu?: string;
-  signature: string;
+  signature?: string;
   context?: string;
   hashAlg?: string;  // per ACVP spec §8.3.2: test-case level for sigVer preHash
+  seed?: string;
+  sk?: string;
+  msg?: string;
+  sig?: string;
+  sm?: string;
 }
 
 interface AcvpTestGroup {
@@ -221,6 +237,7 @@ interface AcvpTestGroup {
 
 export function parseAcvpJson(content: string): { vectors: KatVector[]; inferredVariant?: MLDSAVariant } {
   const parsed = JSON.parse(content);
+  const topMode = (parsed as any)?.mode;
 
   let vectorSet: { testGroups?: AcvpTestGroup[] } | null = null;
   if (Array.isArray(parsed)) {
@@ -235,42 +252,48 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
   let inferredVariant: MLDSAVariant | undefined;
 
   for (const group of vectorSet.testGroups) {
-    // Resolve this group's variant from parameterSet
     let groupVariant: MLDSAVariant | undefined;
     if (group.parameterSet) {
       if (group.parameterSet.includes('44')) groupVariant = 'ML-DSA-44';
       else if (group.parameterSet.includes('65')) groupVariant = 'ML-DSA-65';
       else if (group.parameterSet.includes('87')) groupVariant = 'ML-DSA-87';
     }
-    // inferredVariant stays as the first group's variant — used only as the
-    // UI fallback selector default, not as the run variant for any vector.
     if (groupVariant && !inferredVariant) inferredVariant = groupVariant;
 
     for (const tc of group.tests) {
       const isExternalMu = group.externalMu === true && !!tc.mu;
+      const isKeyGen = group.testType === 'keyGen' || topMode === 'keyGen' || !!tc.seed;
 
-      // Validate required fields — reject early with context rather than silently defaulting
       if (tc.tcId === undefined || tc.tcId === null) {
         throw new Error(`tgId=${group.tgId}: test case is missing tcId`);
       }
       if (!tc.pk) {
         throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "pk"`);
       }
-      if (isExternalMu) {
-        if (!tc.mu) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: externalMu=true but "mu" field is missing`);
-      } else {
-        if (!tc.message) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "message"`);
-      }
-      if (!tc.signature) {
-        throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "signature"`);
+
+      const msg = tc.message ?? tc.msg;
+      const sig = tc.signature ?? tc.sig ?? (tc as any).sm;
+
+      if (!isKeyGen) {
+        if (isExternalMu) {
+          if (!tc.mu) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: externalMu=true but "mu" field is missing`);
+        } else {
+          if (!msg) throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "message" or "msg"`);
+        }
+        if (!sig) {
+          throw new Error(`tgId=${group.tgId} tcId=${tc.tcId}: missing required field "signature", "sig" or "sm"`);
+        }
       }
 
       vectors.push({
         tcId: tc.tcId,
         tgId: group.tgId,
         pk: tc.pk,
-        message: isExternalMu ? tc.mu! : tc.message!,
-        signature: tc.signature,
+        message: isExternalMu ? tc.mu! : (msg ?? ""),
+        signature: sig ?? "",
+        seed: tc.seed,
+        sk: (tc as any).sk,
+        testType: group.testType,
         context: tc.context ?? group.context,
         isExternalMu,
         hashAlg: tc.hashAlg ?? group.hashAlg,
@@ -281,15 +304,21 @@ export function parseAcvpJson(content: string): { vectors: KatVector[]; inferred
     }
   }
 
-  if (vectors.length === 0) throw new Error('No test cases found in testGroups.');
   return { vectors, inferredVariant };
 }
 
 // ─── Format 2: NIST ACVP expectedResults.json ────────────────────────────────
 
+interface ExpectedTestCase {
+  tcId: number;
+  testPassed?: boolean;
+  pk?: string;
+  sk?: string;
+}
+
 interface ExpectedGroup {
   tgId: number;
-  tests: { tcId: number; testPassed: boolean }[];
+  tests: ExpectedTestCase[];
 }
 
 /**
@@ -309,9 +338,13 @@ export function parseExpectedResults(content: string): ExpectedResultsMap {
   }
 
   for (const g of groups) {
-    const tcMap = new Map<number, boolean>();
+    const tcMap = new Map<number, boolean | { pk: string; sk?: string }>();
     for (const tc of g.tests ?? []) {
-      tcMap.set(tc.tcId, tc.testPassed);
+      if (tc.testPassed !== undefined) {
+        tcMap.set(tc.tcId, tc.testPassed);
+      } else if (tc.pk) {
+        tcMap.set(tc.tcId, { pk: tc.pk, sk: tc.sk });
+      }
     }
     map.set(g.tgId, tcMap);
   }
@@ -392,6 +425,9 @@ export function parseSimpleJson(content: string): { vectors: KatVector[]; inferr
     signatureInterface: v.signatureInterface ?? 'internal',
     preHash: v.preHash,
     hashAlg: v.hashAlg,
+    seed: v.seed,
+    sk: v.sk,
+    testType: v.testType ?? (parsed.mode === 'keyGen' ? 'keyGen' : undefined),
   }));
 
   const ALLOWED_VARIANTS: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
@@ -420,7 +456,8 @@ export function parseKatFile(content: string, filename: string): { vectors: KatV
   const parsed = JSON.parse(content);
   const hasTestGroups =
     (Array.isArray(parsed) && parsed.some((el: any) => Array.isArray(el?.testGroups))) ||
-    Array.isArray(parsed?.testGroups);
+    !!parsed?.testGroups;
+
   if (hasTestGroups) return parseAcvpJson(content);
   return parseSimpleJson(content);
 }
@@ -468,118 +505,153 @@ export async function runKatVectors(
       let note = '';
       let isSkipped = false;
 
+      const isKeyGen = v.testType === 'keyGen' || !!v.seed;
+
       // ── Expected result lookup ─────────────────────────────────────────
-      let expectedPassed: boolean | undefined;
-      if (expectedResults && v.tgId !== undefined) {
-        expectedPassed = expectedResults.get(v.tgId)?.get(v.tcId);
+      const expected = expectedResults?.get(v.tgId!)?.get(v.tcId);
+      const expectedPassed = typeof expected === 'boolean' ? expected : undefined;
+      let expectedPk: string | undefined;
+      let expectedSk: string | undefined;
+      if (typeof expected === 'object' && expected !== null) {
+        expectedPk = (expected as any).pk;
+        expectedSk = (expected as any).sk;
       }
 
-      // ── "Internal" Interface / MLDSA Primitive mode ────────────────────
-      // When signatureInterface is "internal", ACVP is testing the raw
-      // MLDSA primitive (Step 7/8 of FIPS 204), meaning NO domain separation
-      // constructed at this layer. We call instance.internal.verify directly.
-      const isInternal = v.signatureInterface === 'internal' && !v.isExternalMu && v._format !== '__legacy_sm__';
+      let actualPkGenerated: string | undefined;
+      let actualSkGenerated: string | undefined;
 
-      // ── Legacy .rsp SM mode ────────────────────────────────────────────
-      if (v._format === '__legacy_sm__') {
-        modeLabel = 'Legacy .rsp';
+      if (isKeyGen) {
+        modeLabel = 'KeyGen';
         modesSet.add(modeLabel);
-        const smBytes = strictHex(v.signature, 'signature (SM)');
-        const sigFromSm = smBytes.slice(0, sigLen);
-        try { verifyOk = instance.verify(sigFromSm, msgBytes, pkBytes); } catch { verifyOk = false; }
+        if (!v.seed) throw new Error('KeyGen vector missing "seed"');
+        const seedBytes = strictHex(v.seed, 'seed');
+        const { publicKey, secretKey } = instance.keygen(seedBytes);
+        actualPkGenerated = uint8ArrayToHex(publicKey);
+        actualSkGenerated = uint8ArrayToHex(secretKey);
+
+        const pkMatch = actualPkGenerated.toLowerCase() === v.pk.toLowerCase();
+        const skMatch = !v.sk || actualSkGenerated.toLowerCase() === v.sk.toLowerCase();
+
+        verifyOk = pkMatch && skMatch;
         note = verifyOk
-          ? 'Signature extracted from SM field and verified (pure mode)'
-          : 'SM verify failed — pre-FIPS 204 Dilithium vectors may not match ML-DSA spec';
+          ? `KeyGen passed (seed → pk${v.sk ? ' + sk' : ''})`
+          : `KeyGen failed: ${!pkMatch ? 'pk mismatch' : ''}${!pkMatch && !skMatch ? ', ' : ''}${!skMatch ? 'sk mismatch' : ''}`;
 
-        // ── External μ mode ────────────────────────────────────────────────
-      } else if (v.isExternalMu) {
-        modeLabel = 'External μ';
-        modesSet.add(modeLabel);
-        const sigBytesArr = strictHex(v.signature, 'signature');
-        try {
-          verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes, { externalMu: true });
-        } catch { verifyOk = false; }
-        note = verifyOk ? 'μ-based internal verify passed' : 'μ-based internal verify failed';
+      } else {
+        // ── "Internal" Interface / MLDSA Primitive mode ────────────────────
+        // When signatureInterface is "internal", ACVP is testing the raw
+        // MLDSA primitive (Step 7/8 of FIPS 204), meaning NO domain separation
+        // constructed at this layer. We call instance.internal.verify directly.
+        const isInternal = v.signatureInterface === 'internal' && !v.isExternalMu && v._format !== '__legacy_sm__';
 
-        // ── MLDSA Primitive mode (internal interface) ──────────────────────
-      } else if (isInternal) {
-        modeLabel = 'MLDSA Primitive';
-        modesSet.add(modeLabel);
-        const sigBytesArr = strictHex(v.signature, 'signature');
-        try {
-          // Verify raw primitive directly, bypassing M' domain separation
-          verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes);
-        } catch { verifyOk = false; }
-        note = verifyOk ? 'Raw internal.verify passed (no domain separator)' : 'Raw internal.verify failed';
-
-        // ── HashML-DSA (preHash mode) ──────────────────────────────────────
-        // A vector is HashML-DSA when either:
-        //   1. preHash names a real hash ("preHash", "SHA2-256", etc.) — excludes "pure"/"none"/"".
-        //   2. signatureInterface="external" with NO preHash field at all — the only HashML-DSA
-        //      signal in simple-JSON format, which has no testGroup wrapper to carry preHash.
-        //      When preHash IS present (even as "pure"/"none"/""), cond 1 already covers the
-        //      real-hash case, so cond 2 must not fire — otherwise "pure" groups from an
-        //      external-interface ACVP testGroup would incorrectly enter this branch and be
-        //      skipped as "unknown hash" when hashAlg="none".
-      } else if (
-        (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) ||
-        (v.signatureInterface === 'external' && !v.isExternalMu && v.preHash === undefined)
-      ) {
-        const resolved = v.hashAlg ? resolveHashFn(v.hashAlg) : null;
-        if (!resolved) {
-          modeLabel = `PreHash (${v.hashAlg ?? 'unknown'})`;
+        // ── Legacy .rsp SM mode ────────────────────────────────────────────
+        if (v._format === '__legacy_sm__') {
+          modeLabel = 'Legacy .rsp';
           modesSet.add(modeLabel);
-          note = `Hash algorithm "${v.hashAlg ?? 'unknown'}" not supported by this implementation — skipped`;
-          verifyOk = false;
-          isSkipped = true;
+          const smBytes = strictHex(v.signature, 'signature (SM)');
+          const sigFromSm = smBytes.slice(0, sigLen);
+          try { verifyOk = instance.verify(sigFromSm, msgBytes, pkBytes); } catch { verifyOk = false; }
+          note = verifyOk
+            ? 'Signature extracted from SM field and verified (pure mode)'
+            : 'SM verify failed — pre-FIPS 204 Dilithium vectors may not match ML-DSA spec';
+
+          // ── External μ mode ────────────────────────────────────────────────
+        } else if (v.isExternalMu) {
+          modeLabel = 'External μ';
+          modesSet.add(modeLabel);
+          const sigBytesArr = strictHex(v.signature, 'signature');
+          try {
+            verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes, { externalMu: true });
+          } catch { verifyOk = false; }
+          note = verifyOk ? 'μ-based internal verify passed' : 'μ-based internal verify failed';
+
+          // ── MLDSA Primitive mode (internal interface) ──────────────────────
+        } else if (isInternal) {
+          modeLabel = 'MLDSA Primitive';
+          modesSet.add(modeLabel);
+          const sigBytesArr = strictHex(v.signature, 'signature');
+          try {
+            // Verify raw primitive directly, bypassing M' domain separation
+            verifyOk = (instance as any).internal.verify(sigBytesArr, msgBytes, pkBytes);
+          } catch { verifyOk = false; }
+          note = verifyOk ? 'Raw internal.verify passed (no domain separator)' : 'Raw internal.verify failed';
+
+          // ── HashML-DSA (preHash mode) ──────────────────────────────────────
+          // A vector is HashML-DSA when either:
+          //   1. preHash names a real hash ("preHash", "SHA2-256", etc.) — excludes "pure"/"none"/"".
+          //   2. signatureInterface="external" with NO preHash field at all — the only HashML-DSA
+          //      signal in simple-JSON format, which has no testGroup wrapper to carry preHash.
+          //      When preHash IS present (even as "pure"/"none"/""), cond 1 already covers the
+          //      real-hash case, so cond 2 must not fire — otherwise "pure" groups from an
+          //      external-interface ACVP testGroup would incorrectly enter this branch and be
+          //      skipped as "unknown hash" when hashAlg="none".
+        } else if (
+          (v.preHash && !['pure', 'none', ''].includes(v.preHash.toLowerCase())) ||
+          (v.signatureInterface === 'external' && !v.isExternalMu && v.preHash === undefined)
+        ) {
+          const resolved = v.hashAlg ? resolveHashFn(v.hashAlg) : null;
+          if (!resolved) {
+            modeLabel = `PreHash (${v.hashAlg ?? 'unknown'})`;
+            modesSet.add(modeLabel);
+            note = `Hash algorithm "${v.hashAlg ?? 'unknown'}" not supported by this implementation — skipped`;
+            verifyOk = false;
+            isSkipped = true;
+          } else {
+            modeLabel = `HashML-DSA (${resolved.label})`;
+            modesSet.add(modeLabel);
+            const sigBytesArr = strictHex(v.signature, 'signature');
+            const ctxBytes = v.context ? strictHex(v.context, 'context') : undefined;
+            try {
+              // Use noble's prehash interface: instance.prehash(hashFn).verify(sig, msg, pk, { context? })
+              verifyOk = (instance as any).prehash(resolved.fn).verify(
+                sigBytesArr,
+                msgBytes,
+                pkBytes,
+                { context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined },
+              );
+            } catch { verifyOk = false; }
+            note = verifyOk
+              ? `HashML-DSA verify passed (${resolved.label}${v.context ? ', with context' : ''})`
+              : `HashML-DSA verify failed (${resolved.label}${v.context ? ', with context' : ''})`;
+          }
+
+          // ── Standard pure ML-DSA ───────────────────────────────────────────
         } else {
-          modeLabel = `HashML-DSA (${resolved.label})`;
+          modeLabel = v.context ? 'Pure + Context' : 'Pure';
           modesSet.add(modeLabel);
           const sigBytesArr = strictHex(v.signature, 'signature');
           const ctxBytes = v.context ? strictHex(v.context, 'context') : undefined;
           try {
-            // Use noble's prehash interface: instance.prehash(hashFn).verify(sig, msg, pk, { context? })
-            verifyOk = (instance as any).prehash(resolved.fn).verify(
-              sigBytesArr,
-              msgBytes,
-              pkBytes,
-              { context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined },
-            );
+            verifyOk = instance.verify(sigBytesArr, msgBytes, pkBytes, {
+              context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined,
+            });
           } catch { verifyOk = false; }
           note = verifyOk
-            ? `HashML-DSA verify passed (${resolved.label}${v.context ? ', with context' : ''})`
-            : `HashML-DSA verify failed (${resolved.label}${v.context ? ', with context' : ''})`;
+            ? `Pure verify passed${v.context ? ' (with context)' : ''}`
+            : `Pure verify failed${v.context ? ' (with context)' : ''}`;
         }
 
-        // ── Standard pure ML-DSA ───────────────────────────────────────────
-      } else {
-        modeLabel = v.context ? 'Pure + Context' : 'Pure';
-        modesSet.add(modeLabel);
-        const sigBytesArr = strictHex(v.signature, 'signature');
-        const ctxBytes = v.context ? strictHex(v.context, 'context') : undefined;
-        try {
-          verifyOk = instance.verify(sigBytesArr, msgBytes, pkBytes, {
-            context: ctxBytes && ctxBytes.length > 0 ? ctxBytes : undefined,
-          });
-        } catch { verifyOk = false; }
-        note = verifyOk
-          ? `Pure verify passed${v.context ? ' (with context)' : ''}`
-          : `Pure verify failed${v.context ? ' (with context)' : ''}`;
       }
 
       if (isSkipped) skipped++;
 
       // Merge expected result
-      const matchesExpected = expectedPassed !== undefined
-        ? verifyOk === expectedPassed
-        : undefined;
+      let matchesExpected: boolean | undefined;
+      if (expectedPassed !== undefined) {
+        matchesExpected = verifyOk === expectedPassed;
+      } else if (expectedPk) {
+        const pkMatch = actualPkGenerated?.toLowerCase() === expectedPk.toLowerCase();
+        const skMatch = !expectedSk || (actualSkGenerated && actualSkGenerated.toLowerCase() === expectedSk.toLowerCase());
+        matchesExpected = pkMatch && skMatch;
+      }
 
       // A vector counts as effectively passing when NOT skipped and either:
       //   (a) crypto verify returned true, OR
       //   (b) expected = fail AND we also got fail (correct rejection of a bad signature)
       const effectivePass = !isSkipped && (verifyOk || (expectedPassed === false && matchesExpected === true));
 
-      results.push({ ...v, verifyOk, effectivePass, modeLabel, note, expectedPassed, matchesExpected });
+      results.push({ ...v, verifyOk, effectivePass, modeLabel, note, expectedPassed, matchesExpected, expectedPk, expectedSk });
+
     } catch (error: any) {
       skipped++;
       results.push({

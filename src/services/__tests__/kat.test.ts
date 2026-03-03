@@ -77,7 +77,14 @@ function makeAcvpGroup(variant: MLDSAVariant, tests: any[], overrides: Record<st
 
 function makeTc(variant: MLDSAVariant, overrides: Record<string, unknown> = {}): object {
     const f = getFixture(variant);
-    return { tcId: 1, pk: f.pk, message: f.msg, signature: f.sig, signatureInterface: 'internal', ...overrides };
+    return {
+        tcId: 1,
+        pk: f.pk,
+        message: f.msg,
+        signature: f.sig,
+        signatureInterface: 'internal',
+        ...overrides
+    };
 }
 
 // ─── SIG_BYTES / PK_BYTES ─────────────────────────────────────────────────────
@@ -433,5 +440,149 @@ describe('runKatVectors', () => {
         const result = await runKatVectors('ML-DSA-44', [makeVector('ML-DSA-44')]);
         expect(typeof result.durationMs).toBe('number');
         expect(result.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    describe('KeyGen support', () => {
+        const seed = '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+
+        it('runs a KeyGen vector and passes with correct PK', async () => {
+            // We need a real seed -> pk pair for this to pass.
+            // Using the deterministic generateKeyPair from mldsa.ts
+            const { generateKeyPair } = await import('../mldsa');
+            const { publicKey, secretKey } = (await import('../mldsa')).getMLDSAInstance('ML-DSA-44').keygen(hexToUint8Array(seed));
+            const pk = uint8ArrayToHex(publicKey);
+            const sk = uint8ArrayToHex(secretKey);
+
+            const v: KatVector = {
+                tcId: 1,
+                pk,
+                seed,
+                sk,
+                testType: 'keyGen',
+                parameterSet: 'ML-DSA-44',
+                message: '',
+                signature: '',
+            };
+
+            const result = await runKatVectors('ML-DSA-44', [v]);
+            expect(result.passed).toBe(1);
+            expect(result.vectors[0].modeLabel).toBe('KeyGen');
+            expect(result.vectors[0].verifyOk).toBe(true);
+        });
+
+        it('fails KeyGen if PK mismatches', async () => {
+            const v: KatVector = {
+                tcId: 1,
+                pk: '00'.repeat(1312),
+                seed,
+                testType: 'keyGen',
+                parameterSet: 'ML-DSA-44',
+                message: '',
+                signature: '',
+            };
+
+            const result = await runKatVectors('ML-DSA-44', [v]);
+            expect(result.passed).toBe(0);
+            expect(result.failed).toBe(1);
+            expect(result.vectors[0].verifyOk).toBe(false);
+            expect(result.vectors[0].note).toContain('pk mismatch');
+        });
+
+        it('parses KeyGen mode from simple JSON', () => {
+            const json = {
+                mode: 'keyGen',
+                vectors: [
+                    { tcId: 1, seed, pk: '00', sk: '11' }
+                ]
+            };
+            const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+            expect(vectors[0].seed).toBe(seed);
+            expect(vectors[0].sk).toBe('11');
+            expect(vectors[0].testType).toBe('keyGen');
+        });
+
+        it('parses KeyGen from ACVP testGroups', () => {
+            const json = {
+                testGroups: [
+                    {
+                        testType: 'keyGen',
+                        parameterSet: 'ML-DSA-44',
+                        tests: [
+                            { tcId: 1, seed, pk: '00', sk: '11' }
+                        ]
+                    }
+                ]
+            };
+            const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+            expect(vectors[0].seed).toBe(seed);
+            expect(vectors[0].sk).toBe('11');
+            expect(vectors[0].testType).toBe('keyGen');
+        });
+
+        it('parses KeyGen from ACVP testGroups with top-level mode', () => {
+            const json = {
+                mode: 'keyGen',
+                testGroups: [
+                    {
+                        testType: 'AFT',
+                        parameterSet: 'ML-DSA-44',
+                        tests: [
+                            { tcId: 1, seed, pk: '00', sk: '11' }
+                        ]
+                    }
+                ]
+            };
+            const { vectors } = parseKatFile(JSON.stringify(json), 'test.json');
+            expect(vectors[0].seed).toBe(seed);
+            expect(vectors[0].sk).toBe('11');
+            expect(vectors[0].testType).toBe('AFT'); // current logic keeps group testType in v.testType
+        });
+
+        it('parses KeyGen expected results with pk/sk', () => {
+            const json = {
+                mode: 'keyGen',
+                testGroups: [
+                    {
+                        tgId: 1,
+                        tests: [
+                            { tcId: 101, pk: 'AA', sk: 'BB' }
+                        ]
+                    }
+                ]
+            };
+            const map = parseExpectedResults(JSON.stringify(json));
+            const entry = map.get(1)?.get(101);
+            expect(entry).toEqual({ pk: 'AA', sk: 'BB' });
+        });
+
+        it('validates KeyGen vectors against expectedResults map (pk/sk comparison)', async () => {
+            const seed = '000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f';
+            const { publicKey, secretKey } = (await import('../mldsa')).getMLDSAInstance('ML-DSA-44').keygen(hexToUint8Array(seed));
+            const pk = uint8ArrayToHex(publicKey);
+            const sk = uint8ArrayToHex(secretKey);
+
+            const v: KatVector = {
+                tcId: 201,
+                tgId: 301,
+                pk: '00', // Valid hex, but doesn't match generated pk
+                seed,
+                testType: 'keyGen',
+                parameterSet: 'ML-DSA-44',
+                message: '',
+                signature: '',
+            };
+
+            // But the expectedResults.json says it SHOULD be the correct pk/sk
+            const expectedMap: ExpectedResultsMap = new Map([
+                [301, new Map([[201, { pk, sk }]])]
+            ]);
+
+            const result = await runKatVectors('ML-DSA-44', [v], 100, expectedMap);
+            // verifyOk should be false because v.pk !== generated pk
+            expect(result.vectors[0].verifyOk).toBe(false);
+            // BUT matchesExpected should be true if our GENERATED pk/sk matches the one in expectedMap
+            expect(result.vectors[0].matchesExpected).toBe(true);
+            expect(result.vectors[0].expectedPk).toBe(pk);
+        });
     });
 });
