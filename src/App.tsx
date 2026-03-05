@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -35,6 +35,7 @@ import {
   User, // Added for X.509
 } from 'lucide-react';
 import {
+  analyzeSignature,
   inspectSignature,
   generateKeyPair,
   signMessage,
@@ -53,7 +54,7 @@ import { cn } from './lib/utils';
 import KatTab, { type SendToInspectorPayload } from './components/KatTab';
 import PythonTab from './components/PythonTab';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Constants ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 const VARIANTS: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
 const HASH_ALGS: HashAlg[] = ['SHA-256', 'SHA-384', 'SHA-512'];
@@ -64,7 +65,7 @@ const DEFAULT_SIGNING_OPTS: SigningOptions = {
   hashAlg: 'SHA-256',
 };
 
-// ─── Download helpers ─────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Download helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 interface KeyBundle { version: 1; variant: MLDSAVariant; publicKey: string; privateKey: string; }
 interface SignatureBundle { version: 1; variant: MLDSAVariant; mode: SignMode; hashAlg?: HashAlg; contextText: string; message: string; signature: string; publicKey: string; }
@@ -95,7 +96,7 @@ function readBinFile(file: File): Promise<Uint8Array> {
   });
 }
 
-// ─── Small UI chips ───────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ Small UI chips ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 function ModeBadge({ mode }: { mode: SignMode }) {
   return (
@@ -121,18 +122,18 @@ function HexPreview({ label, hex, bytes, className }: { label: string; hex: stri
         )}
       </div>
       <div className="p-2 bg-[#141414]/5 font-mono text-[10px] break-all border border-[#141414]/10 leading-relaxed">
-        {hex || <span className="opacity-30 italic">—</span>}
+        {hex || <span className="opacity-30 italic">ΓÇö</span>}
       </div>
     </div>
   );
 }
 
-// ─── App ─────────────────────────────────────────────────────────────────────
+// ΓöÇΓöÇΓöÇ App ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 export default function App() {
   const [variant, setVariant] = useState<MLDSAVariant>('ML-DSA-87');
 
-  // ── Inspect tab state ────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Inspect tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [publicKey, setPublicKey] = useState('');
   const [signature, setSignature] = useState('');
   const [message, setMessage] = useState('');
@@ -140,7 +141,7 @@ export default function App() {
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectMode, setInspectMode] = useState<SignMode>('pure');
   const [inspectContext, setInspectContext] = useState('');
-  /** Raw hex context bytes from a KAT vector — takes priority over inspectContext in handleInspect. */
+  /** Raw hex context bytes from a KAT vector ΓÇö takes priority over inspectContext in handleInspect. */
   const [inspectContextRawHex, setInspectContextRawHex] = useState<string | undefined>(undefined);
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
   const [inspectPrimitive, setInspectPrimitive] = useState(false);
@@ -149,7 +150,7 @@ export default function App() {
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
 
-  // Derived values used by the analysis panels — kept in sync with what handleInspect uses
+  // Derived values used by the analysis panels ΓÇö kept in sync with what handleInspect uses
   const inspectMessageBytes = useMemo<Uint8Array>(() => {
     if (!message) return new Uint8Array();
     return isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message);
@@ -170,7 +171,7 @@ export default function App() {
   const inspectSigBinRef = useRef<HTMLInputElement>(null);
   const inspectMessageBinRef = useRef<HTMLInputElement>(null);
 
-  // ── Generate / Sign tab state ────────────────────────────────────────────
+  // ΓöÇΓöÇ Generate / Sign tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509' | 'kat'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
@@ -181,7 +182,18 @@ export default function App() {
   const [signHashAlg, setSignHashAlg] = useState<HashAlg>('SHA-256');
   const [showAdvancedSign, setShowAdvancedSign] = useState(false);
   const [signDeterministic, setSignDeterministic] = useState(false);
+  const [signRegenLimit, setSignRegenLimit] = useState(100);
+  const [signRegenProgress, setSignRegenProgress] = useState(0);
+  const [signRegenEnabled, setSignRegenEnabled] = useState(false);
+  const [lastSignAttempts, setLastSignAttempts] = useState<number | null>(null);
+  const [isSigning, setIsSigning] = useState(false);
+  const [showImportGuide, setShowImportGuide] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  const isValidHex = (str: string) => {
+    const clean = str.replace(/[^a-fA-F0-9]/g, '');
+    return clean.length > 0 && clean.length % 2 === 0;
+  };
 
   // Key generation binary import refs
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -190,7 +202,7 @@ export default function App() {
   const importSigBinRef = useRef<HTMLInputElement>(null);
   const importGenMessageBinRef = useRef<HTMLInputElement>(null);
 
-  // ── X.509 tab state ───────────────────────────────────────────────────────
+  // ΓöÇΓöÇ X.509 tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const [x509Result, setX509Result] = useState<X509ParseResult | null>(null);
   const [x509VerifyValid, setX509VerifyValid] = useState<boolean | null>(null);
   const [x509IssuerPubHex, setX509IssuerPubHex] = useState('');
@@ -198,10 +210,10 @@ export default function App() {
   const x509IssuerUploadRef = useRef<HTMLInputElement>(null);
   const [x509DragActive, setX509DragActive] = useState(false);
 
-  // ── Inspect handlers ──────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Inspect handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   const handleInspect = async () => {
-    if (!publicKey || !signature || !message) return;
+    if (!publicKey || !signature) return;
     setIsInspecting(true);
     const opts: SigningOptions = {
       mode: inspectMode,
@@ -212,7 +224,7 @@ export default function App() {
       primitiveVerify: inspectPrimitive || undefined,
       externalMu: inspectExternalMu || undefined,
     };
-    // In externalMu mode the message field always holds raw hex bytes (the μ value)
+    // In externalMu mode the message field always holds raw hex bytes (the ╬╝ value)
     const msgInput = (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : message;
     const res = await inspectSignature(variant, publicKey, signature, msgInput, opts);
     setResult(res);
@@ -256,12 +268,16 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ── Key gen / sign handlers ───────────────────────────────────────────────
+  // ΓöÇΓöÇ Key gen / sign handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   const handleGenerateKeys = () => { setGenKeys(generateKeyPair(variant)); setGenSignature(''); };
 
-  const handleSign = () => {
+  const handleSign = async () => {
     if (!genKeys) return;
+    setIsSigning(true);
+    setSignRegenProgress(0);
+    setLastSignAttempts(null);
+
     const opts: SigningOptions = {
       mode: signMode,
       contextText: signContext,
@@ -269,8 +285,30 @@ export default function App() {
       deterministic: signDeterministic,
     };
     const msgInput = isGenMessageBinary ? hexToUint8Array(genMessage) : genMessage;
-    const sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
+
+    let sig = '';
+    let attempts = 0;
+    const limit = signRegenEnabled ? signRegenLimit : 1;
+
+    for (attempts = 1; attempts <= limit; attempts++) {
+      sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
+      const analysis = analyzeSignature(variant, sig);
+
+      if (analysis.zNormOk && analysis.hNormOk) {
+        break;
+      }
+
+      if (attempts % 10 === 0) {
+        setSignRegenProgress(attempts);
+        // Allow UI to update
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
     setGenSignature(sig);
+    setLastSignAttempts(signRegenEnabled ? attempts : null);
+    setIsSigning(false);
+    setSignRegenProgress(0);
   };
 
   const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
@@ -340,7 +378,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ── X.509 Handlers ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ X.509 Handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   const loadX509File = async (file: File) => {
     // Read file. If it ends in .pem or .crt it might be text, .der or .cer might be binary.
@@ -422,7 +460,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ────────────────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   const handleImportSignatureBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setImportError(null);
@@ -448,7 +486,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // "Send to Inspector" — also mirrors mode/context/hashAlg
+  // "Send to Inspector" ΓÇö also mirrors mode/context/hashAlg
   const sendToInspector = () => {
     setPublicKey(genKeys?.publicKey || '');
     setSignature(genSignature);
@@ -485,7 +523,7 @@ export default function App() {
 
 
 
-  // ── Shared UI sub-components ───────────────────────────────────────────────
+  // ΓöÇΓöÇ Shared UI sub-components ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   /** A row of tiny action buttons used above hex displays */
   const ActionRow = ({ children }: { children: React.ReactNode }) => (
@@ -511,6 +549,8 @@ export default function App() {
     primitiveVerify, onPrimitiveVerifyChange,
     externalMu, onExternalMuChange,
     deterministic, onDeterministicChange,
+    regenLimit, onRegenLimitChange,
+    regenEnabled, onRegenEnabledChange,
   }: {
     mode: SignMode; onModeChange: (m: SignMode) => void;
     context: string; onContextChange: (c: string) => void;
@@ -522,6 +562,10 @@ export default function App() {
     onExternalMuChange?: (v: boolean) => void;
     deterministic?: boolean;
     onDeterministicChange?: (v: boolean) => void;
+    regenLimit?: number;
+    onRegenLimitChange?: (l: number) => void;
+    regenEnabled?: boolean;
+    onRegenEnabledChange?: (v: boolean) => void;
   }) => (
     <div className="space-y-4 p-4 border border-[#141414]/20 bg-[#141414]/3 rounded-sm">
       {label && <p className="text-[10px] uppercase font-bold opacity-40 tracking-wider">{label}</p>}
@@ -531,6 +575,7 @@ export default function App() {
         {(['pure', 'hash-ml-dsa'] as SignMode[]).map((m) => (
           <button
             key={m}
+            title={m === 'pure' ? 'Pure ML-DSA' : 'Hash ML-DSA'}
             onClick={() => onModeChange(m)}
             className={cn(
               'px-3 py-1.5 text-[10px] font-mono border transition-colors flex items-center gap-1.5',
@@ -543,7 +588,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* Hash alg selector — only in hash-ml-dsa mode */}
+      {/* Hash alg selector ΓÇö only in hash-ml-dsa mode */}
       {mode === 'hash-ml-dsa' && (
         <div className="space-y-1.5">
           <label className="text-[10px] uppercase font-bold opacity-40">Pre-hash Algorithm</label>
@@ -581,15 +626,10 @@ export default function App() {
           placeholder="e.g. production-v2 or leave empty"
           className="w-full p-2 bg-transparent border border-[#141414]/30 font-mono text-xs focus:outline-none focus:border-[#141414]"
         />
-        {context && (
-          <p className="text-[9px] font-mono opacity-40">
-            Hex: 0x{Array.from(new TextEncoder().encode(context)).map(b => b.toString(16).padStart(2, '0')).join('')}
-            {' '}({new TextEncoder().encode(context).length} bytes)
-          </p>
-        )}
+        {/* Context hex preview removed to keep it cleaner as requested before */}
       </div>
 
-      {/* MLDSA Primitive / External MU options — inspector-only */}
+      {/* MLDSA Primitive / External MU options ΓÇö inspector-only */}
       {(onPrimitiveVerifyChange || onExternalMuChange) && (
         <div className="space-y-3 pt-4 border-t border-[#141414]/10">
           <p className="text-[9px] uppercase font-bold opacity-40 tracking-wider">MLDSA Internal Verification</p>
@@ -610,7 +650,7 @@ export default function App() {
                 <span className="text-[10px] uppercase font-bold opacity-60 block">MLDSA Primitive Verification</span>
                 <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
                   Verify against the raw message with no M' domain separator or context string.
-                  Calls the internal primitive directly — useful for raw/non-FIPS implementations.
+                  Calls the internal primitive directly - useful for raw/non-FIPS implementations.
                 </span>
               </div>
             </label>
@@ -654,10 +694,44 @@ export default function App() {
           </span>
         </label>
       )}
+
+      {/* Regeneration Options */}
+      {onRegenLimitChange && onRegenEnabledChange && !deterministic && (
+        <div className="space-y-3 pt-4 border-t border-[#141414]/10 mt-2">
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!regenEnabled}
+              onChange={(e) => onRegenEnabledChange(e.target.checked)}
+              className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+            />
+            <div>
+              <span className="text-[10px] uppercase font-bold opacity-60 block">Enable Auto-Regeneration for Strict Bounds</span>
+              <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+                Automatically retry generation if the library produces a signature exceeding z or h bounds.
+              </span>
+            </div>
+          </label>
+          {regenEnabled && (
+            <div className="flex items-center gap-3 pl-5 mt-2">
+              <select
+                value={regenLimit}
+                onChange={(e) => onRegenLimitChange(Number(e.target.value))}
+                className="p-1 px-2 bg-white border border-[#141414]/30 font-mono text-[10px] focus:outline-none focus:border-[#141414]"
+              >
+                <option value={100}>100 attempts</option>
+                <option value={200}>200 attempts</option>
+                <option value={500}>500 attempts</option>
+              </select>
+              <span className="text-[10px] opacity-40 font-mono">Maximum iteration count per signing attempt.</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Render ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   return (
     <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
@@ -738,7 +812,7 @@ export default function App() {
         <div className="lg:col-span-9">
           <AnimatePresence mode="wait">
 
-            {/* ── Inspect & Verify Tab ───────────────────────────────────────────── */}
+            {/* ΓöÇΓöÇ Inspect & Verify Tab ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
             {activeTab === 'inspect' ? (
               <motion.div
                 key="inspect"
@@ -756,7 +830,7 @@ export default function App() {
                   >
                     <AlertTriangle size={14} />
                     {inspectImportError}
-                    <button onClick={() => setInspectImportError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+                    <button onClick={() => setInspectImportError(null)} className="ml-auto opacity-60 hover:opacity-100">Γ£ò</button>
                   </motion.div>
                 )}
 
@@ -789,7 +863,7 @@ export default function App() {
                       placeholder="Enter hex-encoded public key..."
                       className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                     />
-                    {/* Key Analysis Panel — visible whenever a public key is present */}
+                    {/* Key Analysis Panel ΓÇö visible whenever a public key is present */}
                     {publicKey && publicKey.replace(/[^0-9a-fA-F]/g, '').length >= 64 && (
                       <KeyAnalysisPanel variant={variant} publicKeyHex={publicKey} />
                     )}
@@ -842,8 +916,16 @@ export default function App() {
                         )}
                       </label>
                       <ActionRow>
+                        <TinyBtn
+                          onClick={() => setIsMessageBinary(!isMessageBinary)}
+                          disabled={!isMessageBinary && !isValidHex(message)}
+                          title={!isMessageBinary && !isValidHex(message) ? "Need valid hex to toggle" : ""}
+                          className={cn(isMessageBinary ? "text-violet-600 font-bold" : "opacity-60")}
+                        >
+                          <Hash size={10} /> {isMessageBinary ? "Hex Mode" : "Text Mode"}
+                        </TinyBtn>
                         <TinyBtn onClick={() => { setIsMessageBinary(false); setMessage(''); setResult(null); }} className="opacity-60 hover:opacity-100">
-                          Clear / Reset Text
+                          Clear / Reset
                         </TinyBtn>
                         {!inspectExternalMu && (
                           <TinyBtn onClick={() => { setInspectImportError(null); inspectMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
@@ -902,22 +984,22 @@ export default function App() {
                         onClick={() => setInspectContextRawHex(undefined)}
                         className="ml-auto opacity-60 hover:opacity-100 shrink-0"
                         title="Clear KAT context"
-                      >✕</button>
+                      >Γ£ò</button>
                     </div>
                   )}
                 </div>
 
                 <button
-                  title={inspectPrimitive ? 'Verify using MLDSA internal primitive (no domain separator)' : inspectExternalMu ? 'Verify using externally-supplied μ (externalMu mode)' : 'Run cryptographic ML-DSA algorithms to verify the signature'}
+                  title={inspectPrimitive ? 'Verify using MLDSA internal primitive (no domain separator)' : inspectExternalMu ? 'Verify using externally-supplied ╬╝ (externalMu mode)' : 'Run cryptographic ML-DSA algorithms to verify the signature'}
                   onClick={handleInspect}
-                  disabled={isInspecting || !publicKey || !signature || !message}
+                  disabled={isInspecting || !publicKey || !signature}
                   className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
                 >
                   {isInspecting ? <RefreshCw className="animate-spin" /> : <ChevronRight />}
                   {isInspecting ? 'Analyzing...' : inspectPrimitive ? 'Inspect & Verify (Primitive)' : inspectExternalMu ? 'Inspect & Verify (External MU)' : 'Inspect & Verify'}
                 </button>
 
-                {/* ── Results ──────────────────────────────────────────────────── */}
+                {/* ΓöÇΓöÇ Results ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */}
                 {result && (
                   <motion.div
                     initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }}
@@ -954,7 +1036,7 @@ export default function App() {
                               )}
                               {result.externalMu && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold border border-blue-400 text-blue-800 bg-blue-50">
-                                  <Hash size={9} /> External μ
+                                  <Hash size={9} /> External ╬╝
                                 </span>
                               )}
                             </div>
@@ -1025,10 +1107,10 @@ export default function App() {
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 1</span>
                               <span className="text-[10px] font-mono opacity-70">tr = SHAKE256(pk, dkLen=64)</span>
                             </div>
-                            <HexPreview label="Public Key Hash (tr) — 64 bytes" hex={result.components.trHex} bytes={64} />
+                            <HexPreview label="Public Key Hash (tr) ΓÇö 64 bytes" hex={result.components.trHex} bytes={64} />
                           </div>
 
-                          {/* Step 2: M' — hidden in primitive/externalMu modes */}
+                          {/* Step 2: M' ΓÇö hidden in primitive/externalMu modes */}
                           {!result.primitiveVerify && !result.externalMu && (
                             <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -1040,14 +1122,14 @@ export default function App() {
                                 </span>
                               </div>
                               <HexPreview
-                                label={`M' — Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
+                                label={`M' ΓÇö Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
                                 hex={result.components.mPrimeHex}
                                 bytes={Math.round(result.components.mPrimeHex.length / 2)}
                               />
                             </div>
                           )}
 
-                          {/* Step 3 (or Step 2 in primitive/externalMu): μ */}
+                          {/* Step 3 (or Step 2 in primitive/externalMu): ╬╝ */}
                           <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">
@@ -1055,27 +1137,27 @@ export default function App() {
                               </span>
                               <span className="text-[10px] font-mono opacity-70">
                                 {result.externalMu
-                                  ? 'μ = provided externally (externalMu mode)'
+                                  ? '╬╝ = provided externally (externalMu mode)'
                                   : result.primitiveVerify
-                                    ? 'μ = SHAKE256(tr ∥ msg, dkLen=64)  — no M\' prefix'
-                                    : 'μ = SHAKE256(tr ∥ M\', dkLen=64)'}
+                                    ? '╬╝ = SHAKE256(tr ΓêÑ msg, dkLen=64)  ΓÇö no M\' prefix'
+                                    : '╬╝ = SHAKE256(tr ΓêÑ M\', dkLen=64)'}
                               </span>
                             </div>
-                            <HexPreview label="Message Representative (μ) — 64 bytes" hex={result.components.muHex} bytes={64} />
+                            <HexPreview label="Message Representative (╬╝) ΓÇö 64 bytes" hex={result.components.muHex} bytes={64} />
                           </div>
 
-                          {/* Step 4: c̃ */}
+                          {/* Step 4: c╠â */}
                           <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 4</span>
                               <span className="text-[10px] font-mono opacity-70">
-                                c̃ = sig[0..{result.components.challengeByteLen}] — extracted from signature
+                                c╠â = sig[0..{result.components.challengeByteLen}] ΓÇö extracted from signature
                               </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div className="md:col-span-2">
                                 <HexPreview
-                                  label={`Commitment Hash (c̃) — ${result.components.challengeByteLen} bytes`}
+                                  label={`Commitment Hash (c╠â) ΓÇö ${result.components.challengeByteLen} bytes`}
                                   hex={result.components.challengeHex}
                                   bytes={result.components.challengeByteLen}
                                 />
@@ -1097,12 +1179,12 @@ export default function App() {
                                 {result.primitiveVerify || result.externalMu ? 'STEP 3' : 'STEP 5'}
                               </span>
                               <span className="text-[10px] font-mono opacity-70">
-                                c̃' = SHAKE256(μ ∥ w₁Encode(w'₁)) — reconstructed via lattice math
+                                c╠â' = SHAKE256(╬╝ ΓêÑ wΓéüEncode(w'Γéü)) ΓÇö reconstructed via lattice math
                               </span>
                             </div>
                             {result.components.reconstructedChallengeHex && (
                               <HexPreview
-                                label="Reconstructed Commitment Hash (c̃') — computed"
+                                label="Reconstructed Commitment Hash (c╠â') ΓÇö computed"
                                 hex={result.components.reconstructedChallengeHex}
                                 bytes={result.components.challengeByteLen}
                                 className="mb-2"
@@ -1115,12 +1197,12 @@ export default function App() {
                               }
                               <p className="text-xs font-mono">
                                 {result.valid
-                                  ? 'c̃\' = c̃ ✓  — Reconstructed commitment hash matches. Signature is valid.'
-                                  : 'c̃\' ≠ c̃ ✗  — Reconstructed commitment hash does not match. Signature invalid or inputs are mismatched.'}
+                                  ? 'c╠â\' = c╠â Γ£ô  ΓÇö Reconstructed commitment hash matches. Signature is valid.'
+                                  : 'c̃\' ≠ c̃ ✘ — Reconstructed commitment hash does not match. Signature invalid or inputs are mismatched.'}
                               </p>
                             </div>
                             <p className="text-[9px] opacity-50 italic font-mono">
-                              The lattice reconstruction (A·z − c·t₁·2^d → UseHint → w'₁) is performed by the noble library. Steps 1–4 above are independently derived from inputs.
+                              The lattice reconstruction (A ⋅ z - c ⋅ t₁ ⋅ 2^d → UseHint → w'₁) is performed by the noble library. Steps 1–4 above are independently derived from inputs.
                             </p>
                           </div>
                         </div>
@@ -1128,7 +1210,7 @@ export default function App() {
                     )}
 
 
-                    {/* Signature Analysis Panel — structural decoder, norm checker, malleability tester */}
+                    {/* Signature Analysis Panel ΓÇö structural decoder, norm checker, malleability tester */}
                     <SignatureAnalysisPanel
                       variant={variant}
                       publicKey={publicKey}
@@ -1176,12 +1258,60 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* JSON Import Guide - Sticky & Collapsible */}
+                  <div className="sticky top-0 z-20 py-2 -mx-2 px-2 bg-[#E4E3E0]/95 backdrop-blur-sm border-b border-[#141414]/5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setShowImportGuide(!showImportGuide)}
+                        className="flex items-center gap-2 text-[10px] uppercase font-bold tracking-wider opacity-60 hover:opacity-100 transition-opacity"
+                      >
+                        <FileJson size={14} />
+                        <span>JSON Import Format Guide</span>
+                        <ChevronDown size={12} className={cn('transition-transform', showImportGuide && 'rotate-180')} />
+                      </button>
+                      <button
+                        onClick={() => copyToClipboard(JSON.stringify({
+                          version: 1,
+                          variant: "ML-DSA-87",
+                          publicKey: "0102...",
+                          privateKey: "0304..."
+                        }, null, 2))}
+                        className="text-[9px] flex items-center gap-1.5 px-2 py-0.5 border border-[#141414]/30 hover:bg-[#141414] hover:text-white transition-colors uppercase font-bold tracking-tighter"
+                      >
+                        <Copy size={10} /> Copy Schema
+                      </button>
+                    </div>
+
+                    <AnimatePresence>
+                      {showImportGuide && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="bg-[#141414] text-[#E4E3E0] p-4 rounded-sm font-mono text-[10px] border border-[#141414]/20">
+                            <p className="opacity-50 mb-2">// key_import.json</p>
+                            <pre className="whitespace-pre-wrap">
+                              {`{
+  "version": 1,
+  "variant": "ML-DSA-87",
+  "publicKey": "0102...",
+  "privateKey": "0304..."
+}`}
+                            </pre>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                   {importError && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                       className="flex items-center gap-3 p-3 border border-red-400 bg-red-50 text-red-700 text-xs font-mono">
                       <AlertTriangle size={14} className="shrink-0" />
                       {importError}
-                      <button onClick={() => setImportError(null)} className="ml-auto opacity-60 hover:opacity-100">✕</button>
+                      <button onClick={() => setImportError(null)} className="ml-auto opacity-60 hover:opacity-100">✘</button>
                     </motion.div>
                   )}
 
@@ -1249,8 +1379,16 @@ export default function App() {
                           )}
                         </label>
                         <ActionRow>
+                          <TinyBtn
+                            onClick={() => setIsGenMessageBinary(!isGenMessageBinary)}
+                            disabled={!isGenMessageBinary && !isValidHex(genMessage)}
+                            title={!isGenMessageBinary && !isValidHex(genMessage) ? "Need valid hex to toggle" : ""}
+                            className={cn(isGenMessageBinary ? "text-violet-600 font-bold" : "opacity-60")}
+                          >
+                            <Hash size={10} /> {isGenMessageBinary ? "Hex Mode" : "Text Mode"}
+                          </TinyBtn>
                           <TinyBtn onClick={() => { setIsGenMessageBinary(false); setGenMessage(''); setGenSignature(''); }} className="opacity-60 hover:opacity-100">
-                            Clear / Reset Text
+                            Clear / Reset
                           </TinyBtn>
                           <TinyBtn onClick={() => { setImportError(null); importGenMessageBinRef.current?.click(); }} className="opacity-60 hover:opacity-100">
                             <Upload size={10} /> Import .bin
@@ -1287,19 +1425,41 @@ export default function App() {
                         hashAlg={signHashAlg} onHashAlgChange={(h) => { setSignHashAlg(h); setGenSignature(''); }}
                         deterministic={signDeterministic}
                         onDeterministicChange={(v) => { setSignDeterministic(v); setGenSignature(''); }}
+                        regenEnabled={signRegenEnabled}
+                        onRegenEnabledChange={(v) => { setSignRegenEnabled(v); setGenSignature(''); }}
+                        regenLimit={signRegenLimit}
+                        onRegenLimitChange={(l) => { setSignRegenLimit(l); setGenSignature(''); }}
                       />
                     )}
                   </div>
 
-                  <button
-                    title="Compute the lattice signature for this payload"
-                    onClick={handleSign}
-                    disabled={!genKeys}
-                    className="w-full py-3 border border-[#141414] bg-[#141414] text-[#E4E3E0] font-serif italic disabled:opacity-30 flex items-center justify-center gap-2"
-                  >
-                    <Layers size={16} />
-                    {signMode === 'hash-ml-dsa' ? `Sign with Hash ML-DSA (${signHashAlg})` : 'Sign Payload'}
-                  </button>
+                  <div className="space-y-3">
+                    <button
+                      title="Compute the lattice signature for this payload"
+                      onClick={handleSign}
+                      disabled={!genKeys || isSigning}
+                      className="w-full py-3 border border-[#141414] bg-[#141414] text-[#E4E3E0] font-serif italic disabled:opacity-30 flex items-center justify-center gap-2"
+                    >
+                      {isSigning ? <RefreshCw size={16} className="animate-spin" /> : <Layers size={16} />}
+                      {isSigning ? `Generating... (${signRegenProgress})` : (signMode === 'hash-ml-dsa' ? `Sign with Hash ML-DSA (${signHashAlg})` : 'Sign Payload')}
+                    </button>
+
+                    {isSigning && signRegenEnabled && (
+                      <div className="w-full bg-[#141414]/10 h-1 rounded-full overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${(signRegenProgress / signRegenLimit) * 100}%` }}
+                          className="bg-violet-600 h-full"
+                        />
+                      </div>
+                    )}
+
+                    {lastSignAttempts !== null && (
+                      <p className="text-[10px] font-mono opacity-60 text-center animate-in fade-in zoom-in">
+                        Signature found after <span className="text-violet-700 font-bold">{lastSignAttempts}</span> iteration{lastSignAttempts === 1 ? '' : 's'}.
+                      </p>
+                    )}
+                  </div>
 
                   {genSignature && (
                     <div className="space-y-2">
@@ -1389,7 +1549,7 @@ export default function App() {
                     <div className="text-center">
                       <span className="font-bold block">Upload X.509 Certificate</span>
                       <span className="text-xs opacity-50 font-mono block">Supports DER and PEM formats</span>
-                      <span className="text-[10px] opacity-40 font-mono mt-1 block">…or drag &amp; drop the certificate file here</span>
+                      <span className="text-[10px] opacity-40 font-mono mt-1 block">...or drag &amp; drop the certificate file here</span>
                     </div>
                   </button>
                   {x509Result?.error && (
@@ -1552,7 +1712,7 @@ export default function App() {
 
           </AnimatePresence>
 
-          {/* KAT Validator — always mounted so run results survive tab switches */}
+          {/* KAT Validator ΓÇö always mounted so run results survive tab switches */}
           <div className={activeTab === 'kat' ? undefined : 'hidden'}>
             <KatTab
               variant={variant}
@@ -1561,10 +1721,10 @@ export default function App() {
             />
           </div>
         </div>
-      </main>
+      </main >
 
       {/* Footer */}
-      <footer className="mt-20 border-t border-[#141414] p-8 bg-[#141414] text-[#E4E3E0]">
+      < footer className="mt-20 border-t border-[#141414] p-8 bg-[#141414] text-[#E4E3E0]" >
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-3">
             <Shield size={20} />
