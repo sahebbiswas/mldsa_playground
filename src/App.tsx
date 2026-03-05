@@ -54,7 +54,7 @@ import { cn } from './lib/utils';
 import KatTab, { type SendToInspectorPayload } from './components/KatTab';
 import PythonTab from './components/PythonTab';
 
-// ΓöÇΓöÇΓöÇ Constants ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const VARIANTS: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
 const HASH_ALGS: HashAlg[] = ['SHA-256', 'SHA-384', 'SHA-512'];
@@ -65,7 +65,7 @@ const DEFAULT_SIGNING_OPTS: SigningOptions = {
   hashAlg: 'SHA-256',
 };
 
-// ΓöÇΓöÇΓöÇ Download helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── Download helpers ─────────────────────────────────────────────────────────
 
 interface KeyBundle { version: 1; variant: MLDSAVariant; publicKey: string; privateKey: string; }
 interface SignatureBundle { version: 1; variant: MLDSAVariant; mode: SignMode; hashAlg?: HashAlg; contextText: string; message: string; signature: string; publicKey: string; }
@@ -96,7 +96,7 @@ function readBinFile(file: File): Promise<Uint8Array> {
   });
 }
 
-// ΓöÇΓöÇΓöÇ Small UI chips ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── Small UI chips ───────────────────────────────────────────────────────────
 
 function ModeBadge({ mode }: { mode: SignMode }) {
   return (
@@ -122,18 +122,18 @@ function HexPreview({ label, hex, bytes, className }: { label: string; hex: stri
         )}
       </div>
       <div className="p-2 bg-[#141414]/5 font-mono text-[10px] break-all border border-[#141414]/10 leading-relaxed">
-        {hex || <span className="opacity-30 italic">ΓÇö</span>}
+        {hex || <span className="opacity-30 italic">-</span>}
       </div>
     </div>
   );
 }
 
-// ΓöÇΓöÇΓöÇ App ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [variant, setVariant] = useState<MLDSAVariant>('ML-DSA-87');
 
-  // ΓöÇΓöÇ Inspect tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Inspect tab state ────────────────────────────────────────────────────
   const [publicKey, setPublicKey] = useState('');
   const [signature, setSignature] = useState('');
   const [message, setMessage] = useState('');
@@ -141,7 +141,7 @@ export default function App() {
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectMode, setInspectMode] = useState<SignMode>('pure');
   const [inspectContext, setInspectContext] = useState('');
-  /** Raw hex context bytes from a KAT vector ΓÇö takes priority over inspectContext in handleInspect. */
+  /** Raw hex context bytes from a KAT vector - takes priority over inspectContext in handleInspect. */
   const [inspectContextRawHex, setInspectContextRawHex] = useState<string | undefined>(undefined);
   const [inspectHashAlg, setInspectHashAlg] = useState<HashAlg>('SHA-256');
   const [inspectPrimitive, setInspectPrimitive] = useState(false);
@@ -150,7 +150,7 @@ export default function App() {
   const [showAdvancedVerify, setShowAdvancedVerify] = useState(false);
   const [inspectImportError, setInspectImportError] = useState<string | null>(null);
 
-  // Derived values used by the analysis panels ΓÇö kept in sync with what handleInspect uses
+  // Derived values used by the analysis panels - kept in sync with what handleInspect uses
   const inspectMessageBytes = useMemo<Uint8Array>(() => {
     if (!message) return new Uint8Array();
     return isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message);
@@ -171,7 +171,7 @@ export default function App() {
   const inspectSigBinRef = useRef<HTMLInputElement>(null);
   const inspectMessageBinRef = useRef<HTMLInputElement>(null);
 
-  // ΓöÇΓöÇ Generate / Sign tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Generate / Sign tab state ────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'inspect' | 'generate' | 'python' | 'x509' | 'kat'>('inspect');
   const [genKeys, setGenKeys] = useState<{ publicKey: string; privateKey: string } | null>(null);
   const [genMessage, setGenMessage] = useState('Hello, ML-DSA!');
@@ -202,7 +202,7 @@ export default function App() {
   const importSigBinRef = useRef<HTMLInputElement>(null);
   const importGenMessageBinRef = useRef<HTMLInputElement>(null);
 
-  // ΓöÇΓöÇ X.509 tab state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── X.509 tab state ───────────────────────────────────────────────────────
   const [x509Result, setX509Result] = useState<X509ParseResult | null>(null);
   const [x509VerifyValid, setX509VerifyValid] = useState<boolean | null>(null);
   const [x509IssuerPubHex, setX509IssuerPubHex] = useState('');
@@ -210,7 +210,7 @@ export default function App() {
   const x509IssuerUploadRef = useRef<HTMLInputElement>(null);
   const [x509DragActive, setX509DragActive] = useState(false);
 
-  // ΓöÇΓöÇ Inspect handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Inspect handlers ──────────────────────────────────────────────────────
 
   const handleInspect = async () => {
     if (!publicKey || !signature) return;
@@ -224,7 +224,7 @@ export default function App() {
       primitiveVerify: inspectPrimitive || undefined,
       externalMu: inspectExternalMu || undefined,
     };
-    // In externalMu mode the message field always holds raw hex bytes (the ╬╝ value)
+    // In externalMu mode the message field always holds raw hex bytes (the μ value)
     const msgInput = (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : message;
     const res = await inspectSignature(variant, publicKey, signature, msgInput, opts);
     setResult(res);
@@ -268,7 +268,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ΓöÇΓöÇ Key gen / sign handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Key gen / sign handlers ───────────────────────────────────────────────
 
   const handleGenerateKeys = () => { setGenKeys(generateKeyPair(variant)); setGenSignature(''); };
 
@@ -378,7 +378,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ΓöÇΓöÇ X.509 Handlers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── X.509 Handlers ────────────────────────────────────────────────────────
 
   const loadX509File = async (file: File) => {
     // Read file. If it ends in .pem or .crt it might be text, .der or .cer might be binary.
@@ -460,7 +460,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ────────────────────────────────────────────────────────────────────────────
 
   const handleImportSignatureBin = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setImportError(null);
@@ -486,7 +486,7 @@ export default function App() {
     e.target.value = '';
   };
 
-  // "Send to Inspector" ΓÇö also mirrors mode/context/hashAlg
+  // "Send to Inspector" - also mirrors mode/context/hashAlg
   const sendToInspector = () => {
     setPublicKey(genKeys?.publicKey || '');
     setSignature(genSignature);
@@ -523,7 +523,7 @@ export default function App() {
 
 
 
-  // ΓöÇΓöÇ Shared UI sub-components ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ── Shared UI sub-components ───────────────────────────────────────────────
 
   /** A row of tiny action buttons used above hex displays */
   const ActionRow = ({ children }: { children: React.ReactNode }) => (
@@ -588,7 +588,7 @@ export default function App() {
         ))}
       </div>
 
-      {/* Hash alg selector ΓÇö only in hash-ml-dsa mode */}
+      {/* Hash alg selector - only in hash-ml-dsa mode */}
       {mode === 'hash-ml-dsa' && (
         <div className="space-y-1.5">
           <label className="text-[10px] uppercase font-bold opacity-40">Pre-hash Algorithm</label>
@@ -629,7 +629,7 @@ export default function App() {
         {/* Context hex preview removed to keep it cleaner as requested before */}
       </div>
 
-      {/* MLDSA Primitive / External MU options ΓÇö inspector-only */}
+      {/* MLDSA Primitive / External MU options - inspector-only */}
       {(onPrimitiveVerifyChange || onExternalMuChange) && (
         <div className="space-y-3 pt-4 border-t border-[#141414]/10">
           <p className="text-[9px] uppercase font-bold opacity-40 tracking-wider">MLDSA Internal Verification</p>
@@ -863,7 +863,7 @@ export default function App() {
                       placeholder="Enter hex-encoded public key..."
                       className="w-full h-24 p-4 bg-transparent border border-[#141414] font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[#141414] resize-none"
                     />
-                    {/* Key Analysis Panel ΓÇö visible whenever a public key is present */}
+                    {/* Key Analysis Panel - visible whenever a public key is present */}
                     {publicKey && publicKey.replace(/[^0-9a-fA-F]/g, '').length >= 64 && (
                       <KeyAnalysisPanel variant={variant} publicKeyHex={publicKey} />
                     )}
@@ -903,7 +903,7 @@ export default function App() {
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <label className="flex items-center gap-2 text-[11px] uppercase font-bold tracking-wider opacity-60">
                         <FileText size={14} />
-                        {inspectExternalMu ? 'μ (mu) — 64-byte hex' : 'Payload / Message'}
+                        {inspectExternalMu ? 'μ (mu) - 64-byte hex' : 'Payload / Message'}
                         {(isMessageBinary || inspectExternalMu) && (
                           <span className="ml-2 font-mono text-[9px] bg-violet-600 text-white px-1.5 py-0.5 rounded-sm">HEX</span>
                         )}
@@ -990,7 +990,7 @@ export default function App() {
                 </div>
 
                 <button
-                  title={inspectPrimitive ? 'Verify using MLDSA internal primitive (no domain separator)' : inspectExternalMu ? 'Verify using externally-supplied ╬╝ (externalMu mode)' : 'Run cryptographic ML-DSA algorithms to verify the signature'}
+                  title={inspectPrimitive ? 'Verify using MLDSA internal primitive (no domain separator)' : inspectExternalMu ? 'Verify using externally-supplied μ (externalMu mode)' : 'Run cryptographic ML-DSA algorithms to verify the signature'}
                   onClick={handleInspect}
                   disabled={isInspecting || !publicKey || !signature}
                   className="w-full py-4 bg-[#141414] text-[#E4E3E0] font-serif italic text-lg flex items-center justify-center gap-3 hover:opacity-90 disabled:opacity-30 transition-opacity"
@@ -1036,7 +1036,7 @@ export default function App() {
                               )}
                               {result.externalMu && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-bold border border-blue-400 text-blue-800 bg-blue-50">
-                                  <Hash size={9} /> External ╬╝
+                                  <Hash size={9} /> External μ
                                 </span>
                               )}
                             </div>
@@ -1107,10 +1107,10 @@ export default function App() {
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 1</span>
                               <span className="text-[10px] font-mono opacity-70">tr = SHAKE256(pk, dkLen=64)</span>
                             </div>
-                            <HexPreview label="Public Key Hash (tr) ΓÇö 64 bytes" hex={result.components.trHex} bytes={64} />
+                            <HexPreview label="Public Key Hash (tr) - 64 bytes" hex={result.components.trHex} bytes={64} />
                           </div>
 
-                          {/* Step 2: M' ΓÇö hidden in primitive/externalMu modes */}
+                          {/* Step 2: M' - hidden in primitive/externalMu modes */}
                           {!result.primitiveVerify && !result.externalMu && (
                             <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -1122,14 +1122,14 @@ export default function App() {
                                 </span>
                               </div>
                               <HexPreview
-                                label={`M' ΓÇö Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
+                                label={`M' - Message representative ${result.meta?.mode === 'hash-ml-dsa' ? '(pre-hashed)' : '(pure)'}`}
                                 hex={result.components.mPrimeHex}
                                 bytes={Math.round(result.components.mPrimeHex.length / 2)}
                               />
                             </div>
                           )}
 
-                          {/* Step 3 (or Step 2 in primitive/externalMu): ╬╝ */}
+                          {/* Step 3 (or Step 2 in primitive/externalMu): μ */}
                           <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">
@@ -1137,27 +1137,27 @@ export default function App() {
                               </span>
                               <span className="text-[10px] font-mono opacity-70">
                                 {result.externalMu
-                                  ? '╬╝ = provided externally (externalMu mode)'
+                                  ? 'μ = provided externally (externalMu mode)'
                                   : result.primitiveVerify
-                                    ? '╬╝ = SHAKE256(tr ΓêÑ msg, dkLen=64)  ΓÇö no M\' prefix'
-                                    : '╬╝ = SHAKE256(tr ΓêÑ M\', dkLen=64)'}
+                                    ? 'μ = SHAKE256(tr ∥ msg, dkLen=64)  - no M\' prefix'
+                                    : 'μ = SHAKE256(tr ∥ M\', dkLen=64)'}
                               </span>
                             </div>
-                            <HexPreview label="Message Representative (╬╝) ΓÇö 64 bytes" hex={result.components.muHex} bytes={64} />
+                            <HexPreview label="Message Representative (μ) - 64 bytes" hex={result.components.muHex} bytes={64} />
                           </div>
 
-                          {/* Step 4: c╠â */}
+                          {/* Step 4: c̃ */}
                           <div className="p-4 bg-white border border-[#141414]/10 space-y-3">
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] font-mono font-bold bg-[#141414] text-[#E4E3E0] px-1.5 py-0.5">STEP 4</span>
                               <span className="text-[10px] font-mono opacity-70">
-                                c╠â = sig[0..{result.components.challengeByteLen}] ΓÇö extracted from signature
+                                c̃ = sig[0..{result.components.challengeByteLen}] - extracted from signature
                               </span>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                               <div className="md:col-span-2">
                                 <HexPreview
-                                  label={`Commitment Hash (c╠â) ΓÇö ${result.components.challengeByteLen} bytes`}
+                                  label={`Commitment Hash (c̃) - ${result.components.challengeByteLen} bytes`}
                                   hex={result.components.challengeHex}
                                   bytes={result.components.challengeByteLen}
                                 />
@@ -1179,12 +1179,12 @@ export default function App() {
                                 {result.primitiveVerify || result.externalMu ? 'STEP 3' : 'STEP 5'}
                               </span>
                               <span className="text-[10px] font-mono opacity-70">
-                                c╠â' = SHAKE256(╬╝ ΓêÑ wΓéüEncode(w'Γéü)) ΓÇö reconstructed via lattice math
+                                c̃' = SHAKE256(μ ∥ w₁Encode(w'₁)) - reconstructed via lattice math
                               </span>
                             </div>
                             {result.components.reconstructedChallengeHex && (
                               <HexPreview
-                                label="Reconstructed Commitment Hash (c╠â') ΓÇö computed"
+                                label="Reconstructed Commitment Hash (c̃') - computed"
                                 hex={result.components.reconstructedChallengeHex}
                                 bytes={result.components.challengeByteLen}
                                 className="mb-2"
@@ -1197,8 +1197,8 @@ export default function App() {
                               }
                               <p className="text-xs font-mono">
                                 {result.valid
-                                  ? 'c╠â\' = c╠â Γ£ô  ΓÇö Reconstructed commitment hash matches. Signature is valid.'
-                                  : 'c̃\' ≠ c̃ ✘ — Reconstructed commitment hash does not match. Signature invalid or inputs are mismatched.'}
+                                  ? 'c̃\' = c̃ ✓   - Reconstructed commitment hash matches. Signature is valid.'
+                                  : 'c̃\' ≠ c̃ ✘ - Reconstructed commitment hash does not match. Signature invalid or inputs are mismatched.'}
                               </p>
                             </div>
                             <p className="text-[9px] opacity-50 italic font-mono">
@@ -1210,7 +1210,7 @@ export default function App() {
                     )}
 
 
-                    {/* Signature Analysis Panel ΓÇö structural decoder, norm checker, malleability tester */}
+                    {/* Signature Analysis Panel - structural decoder, norm checker, malleability tester */}
                     <SignatureAnalysisPanel
                       variant={variant}
                       publicKey={publicKey}
@@ -1712,7 +1712,7 @@ export default function App() {
 
           </AnimatePresence>
 
-          {/* KAT Validator ΓÇö always mounted so run results survive tab switches */}
+          {/* KAT Validator - always mounted so run results survive tab switches */}
           <div className={activeTab === 'kat' ? undefined : 'hidden'}>
             <KatTab
               variant={variant}
