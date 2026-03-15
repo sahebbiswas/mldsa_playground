@@ -2,7 +2,7 @@ import React, { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
     Shield, CheckCircle2, XCircle, Info, RefreshCw, Upload,
-    Fingerprint, Dna, FileJson, ArrowRight, FileCheck2, Calendar, Link, User
+    Fingerprint, Dna, FileJson, ArrowRight, FileCheck2, Calendar, Link, User, Lock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { processCertificateBytes, verifyX509Signature, type X509ParseResult } from '../services/x509';
@@ -144,11 +144,19 @@ export default function X509Tab() {
                             <div className="space-y-3">
                                 <div className="p-3 bg-white border border-[#141414]/10">
                                     <span className="block text-[9px] uppercase font-bold opacity-40 mb-1 flex items-center gap-1"><User size={10} /> Subject</span>
-                                    <div className="text-[11px] font-mono leading-relaxed" dangerouslySetInnerHTML={{ __html: x509Result.details.subject.replace(/, /g, '<br/>') }} />
+                                    <div className="text-[11px] font-mono leading-relaxed">
+                                        {x509Result.details.subject.split(', ').map((item, i) => (
+                                            <div key={i}>{item}</div>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="p-3 bg-white border border-[#141414]/10">
                                     <span className="block text-[9px] uppercase font-bold opacity-40 mb-1 flex items-center gap-1"><Shield size={10} /> Issuer</span>
-                                    <div className="text-[11px] font-mono leading-relaxed" dangerouslySetInnerHTML={{ __html: x509Result.details.issuer.replace(/, /g, '<br/>') }} />
+                                    <div className="text-[11px] font-mono leading-relaxed">
+                                        {x509Result.details.issuer.split(', ').map((item, i) => (
+                                            <div key={i}>{item}</div>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="p-3 bg-white border border-[#141414]/10">
                                     <span className="block text-[9px] uppercase font-bold opacity-40 mb-1 flex items-center gap-1"><Calendar size={10} /> Validity</span>
@@ -182,11 +190,11 @@ export default function X509Tab() {
                                         <span className="text-[10px] uppercase font-bold tracking-widest">Public Key</span>
                                     </div>
                                     <p className="text-xl font-serif italic mb-2">
-                                        {x509Result.details.publicKeyVariant || <span className="text-red-600/70">Unsupported OID</span>}
+                                        {x509Result.details.publicKeyBytes ? "Public Key Extracted" : <span className="text-red-600/70">No Public Key</span>}
                                     </p>
-                                    {x509Result.details.publicKeyVariant && (
+                                    {x509Result.details.publicKeyBytes && (
                                         <p className="text-[10px] font-mono opacity-60">
-                                            Extracted {x509Result.details.publicKeyBytes.length} bytes
+                                            Length: {x509Result.details.publicKeyBytes.length} bytes
                                         </p>
                                     )}
                                 </div>
@@ -305,14 +313,7 @@ export default function X509Tab() {
                             </div>
                         )}
 
-                        <div className="mt-8">
-                            <h3 className="uppercase text-[10px] font-bold tracking-widest opacity-40 flex items-center gap-1.5 pb-2 mb-4 border-b border-[#141414]/10">
-                                <FileJson size={12} /> ASN.1 Structure
-                            </h3>
-                            <div className="bg-[#141414] text-[#E4E3E0] p-4 rounded-sm font-mono text-[9px] whitespace-pre overflow-x-auto leading-relaxed border border-[#141414]/20 shadow-inner max-h-[400px]">
-                                {x509Result.asn1}
-                            </div>
-                        </div>
+                        {/* ASN.1 visualization removed as it is not provided by the parser */}
                     </div>
                 </div>
             )}

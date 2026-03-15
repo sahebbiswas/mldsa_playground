@@ -59,7 +59,14 @@ export default function InspectTab({
 
     const inspectMessageBytes = useMemo<Uint8Array>(() => {
         if (!message) return new Uint8Array();
-        return isMessageBinary ? hexToUint8Array(message) : new TextEncoder().encode(message);
+        if (isMessageBinary) {
+            try {
+                return hexToUint8Array(message);
+            } catch {
+                return new Uint8Array();
+            }
+        }
+        return new TextEncoder().encode(message);
     }, [message, isMessageBinary]);
 
     const inspectOpts = useMemo<SigningOptions>(() => ({
@@ -79,10 +86,15 @@ export default function InspectTab({
     const handleInspect = async () => {
         if (!publicKey || !signature || (inspectExternalMu && !message)) return;
         setIsInspecting(true);
-        const msgInput = (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : message;
-        const res = await inspectSignature(variant, publicKey, signature, msgInput, inspectOpts);
-        setResult(res);
-        setIsInspecting(false);
+        try {
+            const msgInput = (isMessageBinary || inspectExternalMu) ? hexToUint8Array(message) : message;
+            const res = await inspectSignature(variant, publicKey, signature, msgInput, inspectOpts);
+            setResult(res);
+        } catch (e: any) {
+            setResult({ valid: false, error: e?.message || String(e) } as any);
+        } finally {
+            setIsInspecting(false);
+        }
     };
 
     const handleImportPubKeyBin = async (e: React.ChangeEvent<HTMLInputElement>) => {

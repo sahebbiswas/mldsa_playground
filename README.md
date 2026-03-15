@@ -99,7 +99,7 @@ Rendered at the bottom of the result card after any verification run:
 ### 4. X.509 Certificates
 1. Navigate to the **X.509 Certificates** tab.
 2. Drag-and-drop or upload a certificate file (`.pem`, `.cer`, `.der`, `.crt`).
-3. The app decodes the ASN.1 structure and displays Subject, Issuer, Serial, algorithm OID, ML-DSA variant, validity periods, and public key size.
+3. The app displays Subject, Issuer, Serial, algorithm OID, ML-DSA variant, validity periods, and public key size.
 4. Self-signed certificates are automatically verified against their embedded public key. For CA-issued certificates, a secondary input allows importing the issuer's public key (`.bin` or hex).
 5. Export the embedded public key as `.bin` for use elsewhere in the app.
 
@@ -151,7 +151,7 @@ Rows mismatching `expectedResults.json` are highlighted orange. Use the **Show N
 
 ## Test Suite
 
-Tests live in `src/services/mldsa.test.ts` and `src/services/kat.test.ts`.
+Tests live in `src/services/__tests__/`, `src/components/__tests__/`, and cover core logic, UI, and standard vectors.
 
 ```bash
 npm run test

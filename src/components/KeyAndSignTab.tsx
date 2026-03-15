@@ -62,57 +62,62 @@ export default function KeyAndSignTab({
         setSignRegenError(null);
         setState(p => ({ ...p, genSignature: '' }));
 
-        const opts: SigningOptions = {
-            mode: signMode,
-            contextText: signContext,
-            hashAlg: signHashAlg,
-            deterministic: signDeterministic,
-        };
+        try {
+            const opts: SigningOptions = {
+                mode: signMode,
+                contextText: signContext,
+                hashAlg: signHashAlg,
+                deterministic: signDeterministic,
+            };
 
-        let msgInput: Uint8Array | string = genMessage;
-        if (isGenMessageBinary) {
-            const cleanHex = genMessage.replace(/[^0-9a-fA-F]/g, '');
-            if (cleanHex.length % 2 !== 0) {
-                setSignRegenError('Message hex must have an even number of characters.');
-                setIsSigning(false);
-                return;
+            let msgInput: Uint8Array | string = genMessage;
+            if (isGenMessageBinary) {
+                const cleanHex = genMessage.replace(/\s/g, '');
+                if (!/^[0-9a-fA-F]*$/.test(cleanHex)) {
+                    setSignRegenError('Message hex contains invalid characters. Only 0-9, A-F are allowed.');
+                    return;
+                }
+                if (cleanHex.length % 2 !== 0) {
+                    setSignRegenError('Message hex must have an even number of characters.');
+                    return;
+                }
+                msgInput = hexToUint8Array(cleanHex);
             }
-            msgInput = hexToUint8Array(cleanHex);
+
+            const limit = signDeterministic || !signRegenEnabled ? 1 : signRegenLimit;
+            let successSig = '';
+            let attempts = 0;
+
+            for (let i = 1; i <= limit; i++) {
+                attempts = i;
+                const sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
+
+                if (limit === 1) {
+                    successSig = sig;
+                    break;
+                }
+
+                const analysis = analyzeSignature(variant, sig);
+                if (analysis.zNormOk && analysis.hNormOk) {
+                    successSig = sig;
+                    break;
+                }
+
+                if (i % 10 === 0 || i === limit) {
+                    setSignProgress(i);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            if (successSig) {
+                setState(p => ({ ...p, genSignature: successSig }));
+                if (limit > 1) setSignLastAttemptCount(attempts);
+            } else {
+                setSignRegenError(`Failed to generate a signature meeting the z/h bounds within ${limit} attempts. Try increasing the limit or generating a new key.`);
+            }
+        } finally {
+            setIsSigning(false);
         }
-
-        const limit = signDeterministic || !signRegenEnabled ? 1 : signRegenLimit;
-        let successSig = '';
-        let attempts = 0;
-
-        for (let i = 1; i <= limit; i++) {
-            attempts = i;
-            const sig = signMessage(variant, genKeys.privateKey, msgInput, opts);
-
-            if (limit === 1) {
-                successSig = sig;
-                break;
-            }
-
-            const analysis = analyzeSignature(variant, sig);
-            if (analysis.zNormOk && analysis.hNormOk) {
-                successSig = sig;
-                break;
-            }
-
-            if (i % 10 === 0 || i === limit) {
-                setSignProgress(i);
-                await new Promise(r => setTimeout(r, 0));
-            }
-        }
-
-        if (successSig) {
-            setState(p => ({ ...p, genSignature: successSig }));
-            if (limit > 1) setSignLastAttemptCount(attempts);
-        } else {
-            setSignRegenError(`Failed to generate a signature meeting the z/h bounds within ${limit} attempts. Try increasing the limit or generating a new key.`);
-        }
-
-        setIsSigning(false);
     };
 
     const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
@@ -205,7 +210,7 @@ export default function KeyAndSignTab({
             signature: genSignature,
             message: genMessage,
             mode: signMode,
-            contextRawHex: '', // The inspect tab will have signContext as pure text, no raw hex override
+            contextRawHex: signContext ? uint8ArrayToHex(new TextEncoder().encode(signContext)) : '', 
             hashAlg: signHashAlg,
             showAdvanced: signMode === 'hash-ml-dsa' || !!signContext,
             primitiveVerify: false,
