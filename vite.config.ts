@@ -24,5 +24,10 @@ export default defineConfig(({ mode }) => {
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
+    test: {
+      environment: 'jsdom',
+      globals: true,
+      setupFiles: ['./vitest.setup.ts'],
+    },
   };
 });

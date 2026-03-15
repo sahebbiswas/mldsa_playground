@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, beforeAll } from 'vitest';
 import { parseCertificate, processCertificateBytes, verifyX509Signature, MLDSA_OIDS } from '../x509';
 import { generateKeyPair, signMessage, hexToUint8Array } from '../mldsa';
