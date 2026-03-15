@@ -204,9 +204,14 @@ export default function X509Tab() {
                                         <FileCheck2 size={14} className="opacity-60" />
                                         <span className="text-[10px] uppercase font-bold tracking-widest">Signature Algorithm</span>
                                     </div>
-                                    <p className="text-xl font-serif italic mb-2">
-                                        {x509Result.details.signatureVariant || <span className="text-red-600/70">Unsupported OID</span>}
-                                    </p>
+                                    <div className="flex items-baseline flex-wrap gap-2 mb-2">
+                                        <p className="text-xl font-serif italic">
+                                            {x509Result.details.signatureVariant || <span className="text-red-600/70">Unsupported OID</span>}
+                                        </p>
+                                        <span className="text-[10px] font-mono bg-blue-100/50 px-1.5 py-0.5 rounded text-blue-800 break-all">
+                                            OID: {x509Result.details.signatureAlgorithmObj}
+                                        </span>
+                                    </div>
                                     {x509Result.details.signatureVariant && (
                                         <p className="text-[10px] font-mono opacity-60">
                                             {x509Result.details.signatureValueBytes.length} bytes · Pre-hashed TBS: {x509Result.details.tbsBytes.length} bytes
