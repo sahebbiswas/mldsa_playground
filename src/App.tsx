@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -127,6 +127,214 @@ function HexPreview({ label, hex, bytes, className }: { label: string; hex: stri
     </div>
   );
 }
+
+// ─── Shared UI sub-components ───────────────────────────────────────────────
+
+/** A row of tiny action buttons used above hex displays */
+const ActionRow = ({ children }: { children: React.ReactNode }) => (
+  <div className="flex gap-3 flex-wrap items-center">{children}</div>
+);
+
+const TinyBtn = ({ onClick, disabled, className, children, title }: {
+  onClick: () => void; disabled?: boolean; className?: string; children: React.ReactNode; title?: string;
+}) => (
+  <button
+    title={title}
+    onClick={onClick}
+    disabled={disabled}
+    className={cn('text-[10px] flex items-center gap-1 hover:underline disabled:opacity-30', className)}
+  >
+    {children}
+  </button>
+);
+
+/** Signing / Verify options panel (shared between sign + inspect tabs) */
+const AdvancedOptions = ({
+  mode, onModeChange, context, onContextChange, hashAlg, onHashAlgChange, label,
+  primitiveVerify, onPrimitiveVerifyChange,
+  externalMu, onExternalMuChange,
+  deterministic, onDeterministicChange,
+  regenLimit, onRegenLimitChange,
+  regenEnabled, onRegenEnabledChange,
+}: {
+  mode: SignMode; onModeChange: (m: SignMode) => void;
+  context: string; onContextChange: (c: string) => void;
+  hashAlg: HashAlg; onHashAlgChange: (h: HashAlg) => void;
+  label?: string;
+  primitiveVerify?: boolean;
+  onPrimitiveVerifyChange?: (v: boolean) => void;
+  externalMu?: boolean;
+  onExternalMuChange?: (v: boolean) => void;
+  deterministic?: boolean;
+  onDeterministicChange?: (v: boolean) => void;
+  regenLimit?: number;
+  onRegenLimitChange?: (l: number) => void;
+  regenEnabled?: boolean;
+  onRegenEnabledChange?: (v: boolean) => void;
+}) => (
+  <div className="space-y-4 p-4 border border-[#141414]/20 bg-[#141414]/3 rounded-sm">
+    {label && <p className="text-[10px] uppercase font-bold opacity-40 tracking-wider">{label}</p>}
+
+    {/* Mode toggle */}
+    <div className="flex gap-2">
+      {(['pure', 'hash-ml-dsa'] as SignMode[]).map((m) => (
+        <button
+          key={m}
+          title={m === 'pure' ? 'Pure ML-DSA' : 'Hash ML-DSA'}
+          onClick={() => onModeChange(m)}
+          className={cn(
+            'px-3 py-1.5 text-[10px] font-mono border transition-colors flex items-center gap-1.5',
+            mode === m ? 'bg-[#141414] text-[#E4E3E0] border-[#141414]' : 'border-[#141414]/30 hover:border-[#141414]/60',
+          )}
+        >
+          {m === 'pure' ? <Lock size={9} /> : <Hash size={9} />}
+          {m === 'pure' ? 'Pure ML-DSA' : 'Hash ML-DSA'}
+        </button>
+      ))}
+    </div>
+
+    {/* Hash alg selector - only in hash-ml-dsa mode */}
+    {mode === 'hash-ml-dsa' && (
+      <div className="space-y-1.5">
+        <label className="text-[10px] uppercase font-bold opacity-40">Pre-hash Algorithm</label>
+        <div className="flex gap-2 flex-wrap">
+          {HASH_ALGS.map((h) => (
+            <button
+              key={h}
+              title={`Select ${h} as pre-hash algorithm`}
+              onClick={() => onHashAlgChange(h)}
+              className={cn(
+                'px-3 py-1 text-[10px] font-mono border transition-colors',
+                hashAlg === h ? 'bg-violet-700 text-white border-violet-700' : 'border-[#141414]/30 hover:border-[#141414]/60',
+              )}
+            >
+              {h}
+            </button>
+          ))}
+        </div>
+        <p className="text-[9px] opacity-40 font-mono">
+          HashML-DSA pre-hashes the message with the selected algorithm before signing.
+        </p>
+      </div>
+    )}
+
+    {/* Context */}
+    <div className="space-y-1.5">
+      <label className="text-[10px] uppercase font-bold opacity-40">
+        Context String <span className="font-normal normal-case">(optional, UTF-8, max 255 bytes)</span>
+      </label>
+      <input
+        type="text"
+        title="Context string to cryptographically bind the signature to specific protocol metadata"
+        value={context}
+        onChange={(e) => onContextChange(e.target.value)}
+        placeholder="e.g. production-v2 or leave empty"
+        className="w-full p-2 bg-transparent border border-[#141414]/30 font-mono text-xs focus:outline-none focus:border-[#141414]"
+      />
+      {/* Context hex preview removed to keep it cleaner as requested before */}
+    </div>
+
+    {/* MLDSA Primitive / External MU options - inspector-only */}
+    {(onPrimitiveVerifyChange || onExternalMuChange) && (
+      <div className="space-y-3 pt-4 border-t border-[#141414]/10">
+        <p className="text-[9px] uppercase font-bold opacity-40 tracking-wider">MLDSA Internal Verification</p>
+
+        {onPrimitiveVerifyChange && (
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!primitiveVerify}
+              onChange={(e) => {
+                onPrimitiveVerifyChange(e.target.checked);
+                // Primitive and externalMu are mutually exclusive
+                if (e.target.checked && onExternalMuChange) onExternalMuChange(false);
+              }}
+              className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+            />
+            <div>
+              <span className="text-[10px] uppercase font-bold opacity-60 block">MLDSA Primitive Verification</span>
+              <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+                Verify against the raw message with no M' domain separator or context string.
+                Calls the internal primitive directly - useful for raw/non-FIPS implementations.
+              </span>
+            </div>
+          </label>
+        )}
+
+        {onExternalMuChange && (
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!externalMu}
+              onChange={(e) => {
+                onExternalMuChange(e.target.checked);
+                // Primitive and externalMu are mutually exclusive
+                if (e.target.checked && onPrimitiveVerifyChange) onPrimitiveVerifyChange(false);
+              }}
+              className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+            />
+            <div>
+              <span className="text-[10px] uppercase font-bold opacity-60 block">Specify μ (External MU)</span>
+              <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+                Replace the message input with a 64-byte μ value. Calls internal.verify with externalMu=true.
+                Use when your protocol pre-computes μ = SHAKE256(tr ∥ M') externally.
+              </span>
+            </div>
+          </label>
+        )}
+      </div>
+    )}
+
+    {/* Deterministic signing toggle, when provided */}
+    {onDeterministicChange && (
+      <label className="flex items-center gap-2 mt-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={!!deterministic}
+          onChange={(e) => onDeterministicChange(e.target.checked)}
+          className="w-3 h-3 accent-[#141414]"
+        />
+        <span className="text-[10px] uppercase font-bold opacity-60">
+          Deterministic ML-DSA signatures (disable extra randomness)
+        </span>
+      </label>
+    )}
+
+    {/* Regeneration Options */}
+    {onRegenLimitChange && onRegenEnabledChange && !deterministic && (
+      <div className="space-y-3 pt-4 border-t border-[#141414]/10 mt-2">
+        <label className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!!regenEnabled}
+            onChange={(e) => onRegenEnabledChange(e.target.checked)}
+            className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
+          />
+          <div>
+            <span className="text-[10px] uppercase font-bold opacity-60 block">Enable Auto-Regeneration for Strict Bounds</span>
+            <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
+              Automatically retry generation if the library produces a signature exceeding z or h bounds.
+            </span>
+          </div>
+        </label>
+        {regenEnabled && (
+          <div className="flex items-center gap-3 pl-5 mt-2">
+            <select
+              value={regenLimit}
+              onChange={(e) => onRegenLimitChange(Number(e.target.value))}
+              className="p-1 px-2 bg-white border border-[#141414]/30 font-mono text-[10px] focus:outline-none focus:border-[#141414]"
+            >
+              <option value={100}>100 attempts</option>
+              <option value={200}>200 attempts</option>
+              <option value={500}>500 attempts</option>
+            </select>
+            <span className="text-[10px] opacity-40 font-mono">Maximum iteration count per signing attempt.</span>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+);
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 
@@ -522,214 +730,6 @@ export default function App() {
   };
 
 
-
-  // ── Shared UI sub-components ───────────────────────────────────────────────
-
-  /** A row of tiny action buttons used above hex displays */
-  const ActionRow = ({ children }: { children: React.ReactNode }) => (
-    <div className="flex gap-3 flex-wrap items-center">{children}</div>
-  );
-
-  const TinyBtn = ({ onClick, disabled, className, children, title }: {
-    onClick: () => void; disabled?: boolean; className?: string; children: React.ReactNode; title?: string;
-  }) => (
-    <button
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-      className={cn('text-[10px] flex items-center gap-1 hover:underline disabled:opacity-30', className)}
-    >
-      {children}
-    </button>
-  );
-
-  /** Signing / Verify options panel (shared between sign + inspect tabs) */
-  const AdvancedOptions = ({
-    mode, onModeChange, context, onContextChange, hashAlg, onHashAlgChange, label,
-    primitiveVerify, onPrimitiveVerifyChange,
-    externalMu, onExternalMuChange,
-    deterministic, onDeterministicChange,
-    regenLimit, onRegenLimitChange,
-    regenEnabled, onRegenEnabledChange,
-  }: {
-    mode: SignMode; onModeChange: (m: SignMode) => void;
-    context: string; onContextChange: (c: string) => void;
-    hashAlg: HashAlg; onHashAlgChange: (h: HashAlg) => void;
-    label?: string;
-    primitiveVerify?: boolean;
-    onPrimitiveVerifyChange?: (v: boolean) => void;
-    externalMu?: boolean;
-    onExternalMuChange?: (v: boolean) => void;
-    deterministic?: boolean;
-    onDeterministicChange?: (v: boolean) => void;
-    regenLimit?: number;
-    onRegenLimitChange?: (l: number) => void;
-    regenEnabled?: boolean;
-    onRegenEnabledChange?: (v: boolean) => void;
-  }) => (
-    <div className="space-y-4 p-4 border border-[#141414]/20 bg-[#141414]/3 rounded-sm">
-      {label && <p className="text-[10px] uppercase font-bold opacity-40 tracking-wider">{label}</p>}
-
-      {/* Mode toggle */}
-      <div className="flex gap-2">
-        {(['pure', 'hash-ml-dsa'] as SignMode[]).map((m) => (
-          <button
-            key={m}
-            title={m === 'pure' ? 'Pure ML-DSA' : 'Hash ML-DSA'}
-            onClick={() => onModeChange(m)}
-            className={cn(
-              'px-3 py-1.5 text-[10px] font-mono border transition-colors flex items-center gap-1.5',
-              mode === m ? 'bg-[#141414] text-[#E4E3E0] border-[#141414]' : 'border-[#141414]/30 hover:border-[#141414]/60',
-            )}
-          >
-            {m === 'pure' ? <Lock size={9} /> : <Hash size={9} />}
-            {m === 'pure' ? 'Pure ML-DSA' : 'Hash ML-DSA'}
-          </button>
-        ))}
-      </div>
-
-      {/* Hash alg selector - only in hash-ml-dsa mode */}
-      {mode === 'hash-ml-dsa' && (
-        <div className="space-y-1.5">
-          <label className="text-[10px] uppercase font-bold opacity-40">Pre-hash Algorithm</label>
-          <div className="flex gap-2 flex-wrap">
-            {HASH_ALGS.map((h) => (
-              <button
-                key={h}
-                title={`Select ${h} as pre-hash algorithm`}
-                onClick={() => onHashAlgChange(h)}
-                className={cn(
-                  'px-3 py-1 text-[10px] font-mono border transition-colors',
-                  hashAlg === h ? 'bg-violet-700 text-white border-violet-700' : 'border-[#141414]/30 hover:border-[#141414]/60',
-                )}
-              >
-                {h}
-              </button>
-            ))}
-          </div>
-          <p className="text-[9px] opacity-40 font-mono">
-            HashML-DSA pre-hashes the message with the selected algorithm before signing.
-          </p>
-        </div>
-      )}
-
-      {/* Context */}
-      <div className="space-y-1.5">
-        <label className="text-[10px] uppercase font-bold opacity-40">
-          Context String <span className="font-normal normal-case">(optional, UTF-8, max 255 bytes)</span>
-        </label>
-        <input
-          type="text"
-          title="Context string to cryptographically bind the signature to specific protocol metadata"
-          value={context}
-          onChange={(e) => onContextChange(e.target.value)}
-          placeholder="e.g. production-v2 or leave empty"
-          className="w-full p-2 bg-transparent border border-[#141414]/30 font-mono text-xs focus:outline-none focus:border-[#141414]"
-        />
-        {/* Context hex preview removed to keep it cleaner as requested before */}
-      </div>
-
-      {/* MLDSA Primitive / External MU options - inspector-only */}
-      {(onPrimitiveVerifyChange || onExternalMuChange) && (
-        <div className="space-y-3 pt-4 border-t border-[#141414]/10">
-          <p className="text-[9px] uppercase font-bold opacity-40 tracking-wider">MLDSA Internal Verification</p>
-
-          {onPrimitiveVerifyChange && (
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!primitiveVerify}
-                onChange={(e) => {
-                  onPrimitiveVerifyChange(e.target.checked);
-                  // Primitive and externalMu are mutually exclusive
-                  if (e.target.checked && onExternalMuChange) onExternalMuChange(false);
-                }}
-                className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
-              />
-              <div>
-                <span className="text-[10px] uppercase font-bold opacity-60 block">MLDSA Primitive Verification</span>
-                <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
-                  Verify against the raw message with no M' domain separator or context string.
-                  Calls the internal primitive directly - useful for raw/non-FIPS implementations.
-                </span>
-              </div>
-            </label>
-          )}
-
-          {onExternalMuChange && (
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={!!externalMu}
-                onChange={(e) => {
-                  onExternalMuChange(e.target.checked);
-                  // Primitive and externalMu are mutually exclusive
-                  if (e.target.checked && onPrimitiveVerifyChange) onPrimitiveVerifyChange(false);
-                }}
-                className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
-              />
-              <div>
-                <span className="text-[10px] uppercase font-bold opacity-60 block">Specify μ (External MU)</span>
-                <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
-                  Replace the message input with a 64-byte μ value. Calls internal.verify with externalMu=true.
-                  Use when your protocol pre-computes μ = SHAKE256(tr ∥ M') externally.
-                </span>
-              </div>
-            </label>
-          )}
-        </div>
-      )}
-
-      {/* Deterministic signing toggle, when provided */}
-      {onDeterministicChange && (
-        <label className="flex items-center gap-2 mt-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={!!deterministic}
-            onChange={(e) => onDeterministicChange(e.target.checked)}
-            className="w-3 h-3 accent-[#141414]"
-          />
-          <span className="text-[10px] uppercase font-bold opacity-60">
-            Deterministic ML-DSA signatures (disable extra randomness)
-          </span>
-        </label>
-      )}
-
-      {/* Regeneration Options */}
-      {onRegenLimitChange && onRegenEnabledChange && !deterministic && (
-        <div className="space-y-3 pt-4 border-t border-[#141414]/10 mt-2">
-          <label className="flex items-start gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!!regenEnabled}
-              onChange={(e) => onRegenEnabledChange(e.target.checked)}
-              className="w-3 h-3 mt-0.5 accent-[#141414] shrink-0"
-            />
-            <div>
-              <span className="text-[10px] uppercase font-bold opacity-60 block">Enable Auto-Regeneration for Strict Bounds</span>
-              <span className="text-[9px] font-mono opacity-40 leading-relaxed block mt-0.5">
-                Automatically retry generation if the library produces a signature exceeding z or h bounds.
-              </span>
-            </div>
-          </label>
-          {regenEnabled && (
-            <div className="flex items-center gap-3 pl-5 mt-2">
-              <select
-                value={regenLimit}
-                onChange={(e) => onRegenLimitChange(Number(e.target.value))}
-                className="p-1 px-2 bg-white border border-[#141414]/30 font-mono text-[10px] focus:outline-none focus:border-[#141414]"
-              >
-                <option value={100}>100 attempts</option>
-                <option value={200}>200 attempts</option>
-                <option value={500}>500 attempts</option>
-              </select>
-              <span className="text-[10px] opacity-40 font-mono">Maximum iteration count per signing attempt.</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 
   // ΓöÇΓöÇ Render ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
