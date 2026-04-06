@@ -112,6 +112,19 @@ function ModeBadge({ mode }: { mode: SignMode }) {
   );
 }
 
+/**
+ * Renders a labeled hexadecimal preview box with an optional byte-count indicator.
+ *
+ * Displays `label` above a monospace container showing the provided `hex` string;
+ * if `hex` is empty, a muted "-" placeholder is shown. When `bytes` is given,
+ * a small "N bytes" indicator is rendered to the right of the label.
+ *
+ * @param label - Text label displayed above the hex container
+ * @param hex - Hexadecimal string to display inside the preview box
+ * @param bytes - Optional byte length to show next to the label
+ * @param className - Optional additional CSS class names applied to the outer container
+ * @returns The JSX element for the hex preview
+ */
 function HexPreview({ label, hex, bytes, className }: { label: string; hex: string; bytes?: number; className?: string }) {
   return (
     <div className={cn('space-y-1', className)}>
@@ -336,7 +349,15 @@ const AdvancedOptions = ({
   </div>
 );
 
-// ─── App ─────────────────────────────────────────────────────────────────────
+/**
+ * Root React component rendering the ML-DSA Inspector single-page application.
+ *
+ * Renders the complete UI including variant selection, sidebar navigation, and the
+ * Inspect, Generate/Sign, X.509, KAT, and Python tabs with all associated controls,
+ * import/export handlers, cryptographic operations, and result panels.
+ *
+ * @returns The root JSX element for the ML-DSA Inspector user interface.
+ */
 
 export default function App() {
   const [variant, setVariant] = useState<MLDSAVariant>('ML-DSA-87');
