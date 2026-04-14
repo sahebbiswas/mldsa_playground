@@ -527,7 +527,7 @@ export default function App() {
         break;
       }
 
-      if (attempts % 10 === 0) {
+      if (attempts % 100 === 0) {
         setSignRegenProgress(attempts);
         // Allow UI to update
         await new Promise(r => setTimeout(r, 0));
