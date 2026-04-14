@@ -1,14 +1,14 @@
 import React, { useRef, useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-    Shield, CheckCircle2, XCircle, Search, RefreshCw, ChevronDown, ChevronRight
+    CheckCircle2, XCircle, Search, RefreshCw, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
     inspectSignature, hexToUint8Array, uint8ArrayToHex,
-    type MLDSAVariant, type SignMode, type HashAlg, type SigningOptions, type InspectionResult
+    type MLDSAVariant, type SigningOptions, type InspectionResult
 } from '../services/mldsa';
-import { ModeBadge, HexPreview, ActionRow, TinyBtn, AdvancedOptions, readBinFile } from './SharedUI';
+import { ActionRow, TinyBtn, AdvancedOptions, readBinFile } from './SharedUI';
 import SignatureAnalysisPanel from './SignatureAnalysisPanel';
 import type { SendToInspectorPayload } from './KatTab';
 import type { PythonTabProps } from './PythonTab';
