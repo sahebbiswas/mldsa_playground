@@ -141,7 +141,8 @@ export default function KeyAndSignTab({
                 if (typeof parsed.publicKey !== 'string' || typeof parsed.privateKey !== 'string') {
                     throw new Error('Missing or invalid key fields');
                 }
-                if (parsed.variant && typeof parsed.variant === 'string' && parsed.variant !== variant) {
+                const allowedVariants: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+                if (parsed.variant && typeof parsed.variant === 'string' && allowedVariants.includes(parsed.variant as MLDSAVariant) && parsed.variant !== variant) {
                     onVariantChange(parsed.variant as MLDSAVariant);
                 }
                 setState(p => ({ ...p, genKeys: { publicKey: parsed.publicKey, privateKey: parsed.privateKey }, genSignature: '' }));
