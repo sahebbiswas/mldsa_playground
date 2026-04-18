@@ -54,7 +54,7 @@ describe('X509Tab', () => {
 
         const { container } = render(<X509Tab />);
         const input = container.querySelector('input[type="file"]')!;
-        
+
         // Simulating file upload
         fireEvent.change(input, { target: { files: [mockFile] } });
 
@@ -90,7 +90,7 @@ describe('X509Tab', () => {
         const { container } = render(<X509Tab />);
         const input = container.querySelector('input[type="file"]')!;
         fireEvent.change(input, { target: { files: [mockFile] } });
-        
+
         // Wait for parsed results to appear (Subject + Issuer)
         const subjectEls = await screen.findAllByText(/Test Subject/i, {}, { timeout: 3000 });
         expect(subjectEls.length).toBeGreaterThanOrEqual(1);
@@ -135,7 +135,7 @@ describe('X509Tab', () => {
         // Try to verify with manual hex key
         const hexInput = screen.getByPlaceholderText(/paste pure hex bytes here/i);
         fireEvent.change(hexInput, { target: { value: '00'.repeat(1312) } }); // Long enough to enable button
-        
+
         const verifyBtn = screen.getByText(/Verify Signature/i);
         (x509Service.verifyX509Signature as any).mockReturnValue(true);
         (mldsaService.hexToUint8Array as any).mockReturnValue(new Uint8Array(1312));

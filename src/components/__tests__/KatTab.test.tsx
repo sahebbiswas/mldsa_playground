@@ -27,8 +27,8 @@ describe('KatTab', () => {
         vi.clearAllMocks();
         // Shim File.prototype.text if missing (jsdom < 20)
         if (!File.prototype.text) {
-            File.prototype.text = function() {
-                return Promise.resolve('{"testGroups": []}'); 
+            File.prototype.text = function () {
+                return Promise.resolve('{"testGroups": []}');
             };
         }
         // Mock URL and document for export testing
@@ -42,10 +42,10 @@ describe('KatTab', () => {
 
     it('renders correctly in initial state', () => {
         render(
-            <KatTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
-                onSendToInspector={mockOnSendToInspector} 
+            <KatTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
+                onSendToInspector={mockOnSendToInspector}
             />
         );
         expect(screen.getByText(/KAT Validator/i)).toBeDefined();
@@ -78,17 +78,17 @@ describe('KatTab', () => {
         });
 
         const { container } = render(
-            <KatTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
-                onSendToInspector={mockOnSendToInspector} 
+            <KatTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
+                onSendToInspector={mockOnSendToInspector}
             />
         );
 
         const inputs = container.querySelectorAll('input[type="file"]');
-        const promptInput = inputs[inputs.length - 1]; 
+        const promptInput = inputs[inputs.length - 1];
         // Actually wait, let's use the text or something more reliable.
-        
+
         fireEvent.change(promptInput, { target: { files: [mockFile] } });
 
         await waitFor(() => {
@@ -126,10 +126,10 @@ describe('KatTab', () => {
         });
 
         const { container } = render(
-            <KatTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
-                onSendToInspector={mockOnSendToInspector} 
+            <KatTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
+                onSendToInspector={mockOnSendToInspector}
             />
         );
 
@@ -141,13 +141,13 @@ describe('KatTab', () => {
         const promptInput = inputs[1];
 
         fireEvent.change(promptInput, { target: { files: [mockPromptFile] } });
-        
+
         await waitFor(() => expect(screen.getByText(/tc#1/i)).toBeDefined());
 
         // Now load expected results
         const mockExpectedFile = new File(['{"results": []}'], 'expected.json');
         (katService.parseExpectedResults as any).mockReturnValue(new Map([[1, new Map([[1, { testPassed: true }]])]]));
-        
+
         fireEvent.change(expectedInput, { target: { files: [mockExpectedFile] } });
 
         await waitFor(() => {
@@ -170,10 +170,10 @@ describe('KatTab', () => {
         });
 
         const { container } = render(
-            <KatTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
-                onSendToInspector={mockOnSendToInspector} 
+            <KatTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
+                onSendToInspector={mockOnSendToInspector}
             />
         );
 
@@ -189,7 +189,7 @@ describe('KatTab', () => {
 
         // Filter for failed
         fireEvent.click(screen.getByText(/1 failed/i));
-        
+
         expect(screen.queryByText(/tc#1/i)).toBeNull();
         expect(screen.getByText(/tc#2/i)).toBeDefined();
     });
@@ -201,10 +201,10 @@ describe('KatTab', () => {
         });
 
         const { container } = render(
-            <KatTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
-                onSendToInspector={mockOnSendToInspector} 
+            <KatTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
+                onSendToInspector={mockOnSendToInspector}
             />
         );
 

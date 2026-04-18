@@ -50,7 +50,7 @@ describe('SignatureAnalysisPanel', () => {
         publicKey: 'pub',
         signatureHex: 'sig',
         message: new Uint8Array([1, 2, 3]),
-        opts: { mode: 'pure' as const, contextText: '', hashAlg: 'SHA-256' as const },
+        opts: { mode: 'pure' as const, contextText: '', hashAlg: undefined },
     };
 
     beforeEach(() => {
@@ -70,7 +70,7 @@ describe('SignatureAnalysisPanel', () => {
     it('renders correctly and toggles sections', async () => {
         (mldsaService.analyzeSignature as any).mockReturnValue(mockAnalysis);
         render(<SignatureAnalysisPanel {...mockProps} />);
-        
+
         expect(screen.getByText(/Deeper Signature Analysis/i)).toBeDefined();
 
         // 1. Structure
@@ -94,7 +94,7 @@ describe('SignatureAnalysisPanel', () => {
         ]);
 
         render(<SignatureAnalysisPanel {...mockProps} />);
-        
+
         fireEvent.click(screen.getByText(/Signature Malleability Tester/i));
         const runBtn = screen.getByText(/Run Malleability Test/i);
         fireEvent.click(runBtn);

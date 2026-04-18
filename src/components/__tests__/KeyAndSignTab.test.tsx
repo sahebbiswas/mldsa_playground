@@ -60,9 +60,9 @@ describe('KeyAndSignTab', () => {
 
     it('renders initial state with variant selector', () => {
         render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={mockState}
                 setState={mockSetState}
@@ -76,9 +76,9 @@ describe('KeyAndSignTab', () => {
         (mldsaService.generateKeyPair as any).mockReturnValue({ publicKey: 'pub', privateKey: 'priv' });
 
         render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={mockState}
                 setState={mockSetState}
@@ -87,7 +87,7 @@ describe('KeyAndSignTab', () => {
 
         const genBtn = screen.getByRole('button', { name: /Generate New Pair/i });
         fireEvent.click(genBtn);
-        
+
         expect(mldsaService.generateKeyPair).toHaveBeenCalled();
         expect(mockSetState).toHaveBeenCalled();
     });
@@ -97,9 +97,9 @@ describe('KeyAndSignTab', () => {
         (mldsaService.signMessage as any).mockReturnValue('sig');
 
         render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={stateWithKeys}
                 setState={mockSetState}
@@ -108,18 +108,18 @@ describe('KeyAndSignTab', () => {
 
         const signBtn = screen.getByRole('button', { name: /Sign Payload/i });
         fireEvent.click(signBtn);
-        
+
         expect(mldsaService.signMessage).toHaveBeenCalled();
         expect(mockSetState).toHaveBeenCalled();
     });
 
     it('handles binary message input validation', async () => {
         const stateWithKeys = { ...mockState, genKeys: { publicKey: 'pub', privateKey: 'priv' }, isGenMessageBinary: true, genMessage: 'invalid' };
-        
+
         render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={stateWithKeys}
                 setState={mockSetState}
@@ -127,16 +127,16 @@ describe('KeyAndSignTab', () => {
         );
 
         fireEvent.click(screen.getByRole('button', { name: /Sign Payload/i }));
-        
+
         expect(screen.getByText(/Message hex contains invalid characters/i)).toBeDefined();
     });
 
     it('exports keys to JSON', () => {
         const stateWithKeys = { ...mockState, genKeys: { publicKey: 'pub', privateKey: 'priv' } };
         render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={stateWithKeys}
                 setState={mockSetState}
@@ -159,9 +159,9 @@ describe('KeyAndSignTab', () => {
         vi.stubGlobal('FileReader', function() { return mockReader; });
 
         const { container } = render(
-            <KeyAndSignTab 
-                variant="ML-DSA-44" 
-                onVariantChange={mockOnVariantChange} 
+            <KeyAndSignTab
+                variant="ML-DSA-44"
+                onVariantChange={mockOnVariantChange}
                 onSendToInspector={mockOnSendToInspector}
                 state={mockState}
                 setState={mockSetState}
@@ -170,7 +170,7 @@ describe('KeyAndSignTab', () => {
 
         const input = container.querySelector('input[accept=".json"]')!;
         const mockFile = new File(['{}'], 'keys.json', { type: 'application/json' });
-        
+
         fireEvent.change(input, { target: { files: [mockFile] } });
 
         await waitFor(() => {

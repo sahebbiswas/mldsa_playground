@@ -69,7 +69,7 @@ describe('KeyAnalysisPanel', () => {
     it('renders correctly and toggles sections', async () => {
         (mldsaService.analyzePublicKey as any).mockReturnValue(mockAnalysis);
         render(<KeyAnalysisPanel variant="ML-DSA-44" publicKeyHex="00" />);
-        
+
         expect(screen.getByText(/Key Analysis/i)).toBeDefined();
 
         // 1. Decoder
@@ -90,10 +90,10 @@ describe('KeyAnalysisPanel', () => {
     it('handles clipboard copy', async () => {
         (mldsaService.analyzePublicKey as any).mockReturnValue(mockAnalysis);
         (navigator.clipboard.writeText as any).mockResolvedValueOnce(undefined);
-        
+
         render(<KeyAnalysisPanel variant="ML-DSA-44" publicKeyHex="00" />);
         fireEvent.click(screen.getByText(/Key Fingerprints/i));
-        
+
         const copyBtns = screen.getAllByTitle('Copy to clipboard');
         await act(async () => {
             fireEvent.click(copyBtns[0]);
