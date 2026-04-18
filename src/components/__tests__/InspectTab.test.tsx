@@ -57,8 +57,8 @@ describe('InspectTab', () => {
 
     it('renders correctly in initial state', () => {
         render(
-            <InspectTab 
-                variant="ML-DSA-44" 
+            <InspectTab
+                variant="ML-DSA-44"
                 initialPayload={null}
                 state={mockState}
                 setState={mockSetState}
@@ -80,8 +80,8 @@ describe('InspectTab', () => {
         };
 
         render(
-            <InspectTab 
-                variant="ML-DSA-44" 
+            <InspectTab
+                variant="ML-DSA-44"
                 initialPayload={payload}
                 state={mockState}
                 setState={mockSetState}
@@ -96,8 +96,8 @@ describe('InspectTab', () => {
         (mldsaService.inspectSignature as any).mockResolvedValue({ valid: true });
 
         render(
-            <InspectTab 
-                variant="ML-DSA-44" 
+            <InspectTab
+                variant="ML-DSA-44"
                 initialPayload={null}
                 state={stateWithData}
                 setState={mockSetState}
@@ -117,8 +117,8 @@ describe('InspectTab', () => {
         (mldsaService.inspectSignature as any).mockResolvedValue({ valid: false, error: 'Wrong sig' });
 
         render(
-            <InspectTab 
-                variant="ML-DSA-44" 
+            <InspectTab
+                variant="ML-DSA-44"
                 initialPayload={null}
                 state={stateWithData}
                 setState={mockSetState}
@@ -138,18 +138,18 @@ describe('InspectTab', () => {
         (mldsaService.uint8ArrayToHex as any).mockReturnValue('deadbeef');
 
         const { container } = render(
-            <InspectTab 
-                variant="ML-DSA-44" 
+            <InspectTab
+                variant="ML-DSA-44"
                 initialPayload={null}
                 state={mockState}
                 setState={mockSetState}
             />
         );
 
-        const loadPubBtns = screen.getAllByTitle(/Load from binary file/i); 
+        const loadPubBtns = screen.getAllByTitle(/Load from binary file/i);
         const loadPubBtn = loadPubBtns[0];
         const inputs = container.querySelectorAll('input[type="file"]');
-        
+
         fireEvent.change(inputs[0], { target: { files: [new File([''], 'pub.bin')] } });
 
         await waitFor(() => {
