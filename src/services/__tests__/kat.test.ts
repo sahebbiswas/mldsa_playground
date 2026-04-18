@@ -3,6 +3,7 @@ import {
     parseKatFile,
     parseExpectedResults,
     runKatVectors,
+    inferVariantFromVectors,
     KAT_VARIANT_SIZES,
     SIG_BYTES,
     PK_BYTES,
@@ -296,6 +297,14 @@ describe('parseKatFile', () => {
     it('throws on empty content', () => {
         expect(() => parseKatFile('', 'empty.json')).toThrow();
     });
+
+    it('inferVariantFromVectors correctly detects all variants', () => {
+        const makeV = (v: MLDSAVariant) => ({ pk: '00'.repeat(PK_BYTES[v]) } as KatVector);
+        expect(inferVariantFromVectors([makeV('ML-DSA-44')])).toBe('ML-DSA-44');
+        expect(inferVariantFromVectors([makeV('ML-DSA-65')])).toBe('ML-DSA-65');
+        expect(inferVariantFromVectors([makeV('ML-DSA-87')])).toBe('ML-DSA-87');
+        expect(inferVariantFromVectors([{ pk: '00' } as KatVector])).toBeNull();
+    });
 });
 
 // ─── runKatVectors ────────────────────────────────────────────────────────────
@@ -324,6 +333,32 @@ describe('runKatVectors', () => {
         const result = await runKatVectors('ML-DSA-44', [v]);
         // When interface is 'external', it falls into the default path (Pure)
         expect(result.vectors[0].modeLabel).toBe('PreHash (unknown)');
+    });
+
+    it('runs an external mu vector', async () => {
+        const v = makeVector('ML-DSA-44', { isExternalMu: true, message: '00'.repeat(64) });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].modeLabel).toBe('External μ');
+    });
+
+    it('runs a HashML-DSA vector (preHash interface)', async () => {
+        const v = makeVector('ML-DSA-44', {
+            signatureInterface: 'external',
+            preHash: 'SHA2-256',
+            hashAlg: 'SHA2-256'
+        });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].modeLabel).toBe('HashML-DSA (SHA2-256)');
+    });
+
+    it('runs a HashML-DSA vector (SHAKE256)', async () => {
+        const v = makeVector('ML-DSA-44', {
+            signatureInterface: 'external',
+            preHash: 'SHAKE256',
+            hashAlg: 'SHAKE256'
+        });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].modeLabel).toBe('HashML-DSA (SHAKE-256)');
     });
 
     it('fails a vector with a tampered signature', async () => {
@@ -424,6 +459,18 @@ describe('runKatVectors', () => {
         expect(result.vectors[0].error).toBeDefined();
     });
 
+    it('strictHex throws on odd-length string', async () => {
+        const v = makeVector('ML-DSA-44', { pk: 'abc' });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].error).toContain('odd-length hex string');
+    });
+
+    it('strictHex throws on non-hex characters', async () => {
+        const v = makeVector('ML-DSA-44', { pk: 'gg' });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].error).toContain('contains non-hex characters');
+    });
+
     it('modesPresent lists all unique mode labels from the run', async () => {
         const result = await runKatVectors('ML-DSA-44', [
             makeVector('ML-DSA-44'),
@@ -434,6 +481,12 @@ describe('runKatVectors', () => {
             makeVector('ML-DSA-44', { signatureInterface: 'external', preHash: 'pure', context: 'deadbeef' }),
         ]);
         expect(result2.modesPresent).toContain('Pure + Context');
+    });
+
+    it('runs a legacy .rsp vector', async () => {
+        const v = makeVector('ML-DSA-44', { _format: '__legacy_sm__', signature: '00'.repeat(SIG_BYTES['ML-DSA-44']) });
+        const result = await runKatVectors('ML-DSA-44', [v]);
+        expect(result.vectors[0].modeLabel).toBe('Legacy .rsp');
     });
 
     it('durationMs is a non-negative number', async () => {
@@ -469,6 +522,7 @@ describe('runKatVectors', () => {
             expect(result.vectors[0].modeLabel).toBe('KeyGen');
             expect(result.vectors[0].verifyOk).toBe(true);
         });
+
 
         it('fails KeyGen if PK mismatches', async () => {
             const v: KatVector = {
@@ -583,6 +637,19 @@ describe('runKatVectors', () => {
             // BUT matchesExpected should be true if our GENERATED pk/sk matches the one in expectedMap
             expect(result.vectors[0].matchesExpected).toBe(true);
             expect(result.vectors[0].expectedPk).toBe(pk);
+        });
+
+        it('handles exceptions during keygen by skipping with error', async () => {
+            const v = makeVector('ML-DSA-44', { testType: 'keyGen', seed: '00'.repeat(32) });
+            const { ml_dsa44 } = await import('@noble/post-quantum/ml-dsa.js');
+            const spy = vi.spyOn(ml_dsa44, 'keygen').mockImplementation(() => { throw new Error('keygen error'); });
+
+            const result = await runKatVectors('ML-DSA-44', [v]);
+            expect(result.skipped).toBe(1);
+            expect(result.vectors[0].modeLabel).toBe('Error');
+            expect(result.vectors[0].error).toBe('keygen error');
+
+            spy.mockRestore();
         });
     });
 });

@@ -1,21 +1,32 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
+import * as asn1js from 'asn1js';
 import { parseCertificate, processCertificateBytes, verifyX509Signature, MLDSA_OIDS } from '../x509';
 import { generateKeyPair, signMessage, hexToUint8Array } from '../mldsa';
 
 /** PEM certificate for parsing tests - generated via selfsigned in beforeAll */
 let TEST_CERT_PEM: string;
+let MULTI_RDN_CERT_PEM: string;
 
 beforeAll(async () => {
     const { generate } = await import('selfsigned');
     const pems = await generate(
         [{ name: 'commonName', value: 'test.example.com' }],
         {
-            // Keep options minimal to satisfy current SelfsignedOptions typings
             keySize: 2048,
         }
     );
     TEST_CERT_PEM = pems.cert;
+
+    const multiPems = await generate(
+        [
+            { name: 'commonName', value: 'Multi RDN' },
+            { name: 'organizationName', value: 'Test Org' },
+            { name: 'localityName', value: 'San Francisco' },
+        ],
+        { keySize: 2048 }
+    );
+    MULTI_RDN_CERT_PEM = multiPems.cert;
 });
 
 describe('x509 service', () => {
@@ -69,6 +80,23 @@ describe('x509 service', () => {
             const result = parseCertificate(new Uint8Array(der));
             expect(result.valid).toBe(true);
             expect(result.details!.publicKeyBytes.length).toBeGreaterThan(0);
+        });
+
+        it('should correctly map multi-RDN OIDs to readable strings', () => {
+            const result = parseCertificate(MULTI_RDN_CERT_PEM);
+            expect(result.valid).toBe(true);
+            const subject = result.details!.subject;
+            expect(subject).toContain('CN=Multi RDN');
+            expect(subject).toContain('O=Test Org');
+            expect(subject).toContain('L=San Francisco');
+        });
+
+        it('should return error when pkijs.Certificate throws', () => {
+            const asn = new asn1js.Integer({ value: 1 });
+            const der = asn.toBER(false);
+            const result = parseCertificate(new Uint8Array(der));
+            expect(result.valid).toBe(false);
+            expect(result.error).toBeDefined();
         });
     });
 
@@ -136,6 +164,15 @@ describe('x509 service', () => {
                 const valid = verifyX509Signature(tbsBytes, sigBytes, pkBytes, variant);
                 expect(valid).toBe(true);
             }
+        });
+
+        it('should return false and log error when verification throws', () => {
+            const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+            const invalidSig = new Uint8Array([1, 2, 3]); // Too short
+            const result = verifyX509Signature(new Uint8Array(10), invalidSig, new Uint8Array(32), 'ML-DSA-44');
+            expect(result).toBe(false);
+            expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('X.509 verification math failed'), expect.anything());
+            consoleSpy.mockRestore();
         });
     });
 

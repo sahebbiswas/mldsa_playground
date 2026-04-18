@@ -188,6 +188,8 @@ describe('mldsa helpers', () => {
         expect(getMLDSAInstance('ML-DSA-44')).toBeDefined();
         expect(getMLDSAInstance('ML-DSA-65')).toBeDefined();
         expect(getMLDSAInstance('ML-DSA-87')).toBeDefined();
+        // @ts-ignore
+        expect(getMLDSAInstance('INVALID')).toBeDefined();
     });
 });
 
@@ -312,6 +314,12 @@ describe('inspectSignature components', () => {
             pureOpts({ contextRawHex: 'xyz' }));
         expect(result.valid).toBe(false);
         expect(result.error).toMatch(/contextRawHex is malformed/);
+    });
+
+    it('signMessage throws on malformed contextRawHex', () => {
+        const { privateKey } = getKeys('ML-DSA-44');
+        expect(() => signMessage('ML-DSA-44', privateKey, 'msg', pureOpts({ contextRawHex: 'xyz' })))
+            .toThrow(/contextRawHex is malformed/);
     });
 });
 
@@ -481,6 +489,27 @@ describe('testMalleability', () => {
         for (const r of results) {
             expect(['c̃', 'z', 'h']).toContain(r.region);
         }
+    });
+
+    it('regionOf returns h for indices in hint region', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('msg');
+        const sig = signMessage('ML-DSA-44', privateKey, msg, pureOpts());
+        const sigLen = hexToUint8Array(sig).length;
+        // The last few bytes are definitely in the 'h' region
+        const results = await testMalleability('ML-DSA-44', publicKey, sig, msg, pureOpts(), sigLen - 1);
+        const last = results.find(r => r.byteIndex === sigLen - 1);
+        expect(last?.region).toBe('h');
+    });
+
+    it('supports malleability testing in preHash mode', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('msg');
+        const opts = { mode: 'hash-ml-dsa' as const, hashAlg: 'SHA-256' as const, contextText: '' };
+        const sig = signMessage('ML-DSA-44', privateKey, msg, opts);
+        const results = await testMalleability('ML-DSA-44', publicKey, sig, msg, opts, 512);
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.every(r => r.stillValid === false)).toBe(true);
     });
 
     it('byteIndex and bitIndex are in valid ranges', async () => {
