@@ -68,7 +68,7 @@ export interface InspectionResult {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Number of commitment-hash bytes per variant (λ/8). */
+/** Number of commitment-hash bytes per variant (2*λ bits = λ/4 bytes). */
 const C_TILDE_BYTES: Record<MLDSAVariant, number> = {
   'ML-DSA-44': 32,
   'ML-DSA-65': 48,
@@ -99,7 +99,8 @@ export const getMLDSAInstance = (variant: MLDSAVariant) => {
     case 'ML-DSA-44': return ml_dsa44;
     case 'ML-DSA-65': return ml_dsa65;
     case 'ML-DSA-87': return ml_dsa87;
-    default: return ml_dsa87;
+    default:
+      throw new Error(`Unknown ML-DSA variant: ${variant}`);
   }
 };
 
@@ -406,7 +407,7 @@ export function analyzeSignature(variant: MLDSAVariant, signatureHex: string): S
   const p = VARIANT_PARAMS[variant];
   const sig = hexToUint8Array(signatureHex);
 
-  const cTildeBytes = p.lambda / 8;
+  const cTildeBytes = p.lambda / 4;
   const zBytesPerPoly = (256 * p.z_bits) / 8;      // always integer
   const zTotalBytes = p.l * zBytesPerPoly;
   const hTotalBytes = p.omega + p.k;                // FIPS 204 §7.2 hint encoding
@@ -498,7 +499,7 @@ export async function testMalleability(
     : new TextEncoder().encode(opts.contextText);
   const ctxOpt = contextBytes.length ? { context: contextBytes } : {};
 
-  const cLen = p.lambda / 8;
+  const cLen = p.lambda / 4;
   const zLen = p.l * (256 * p.z_bits) / 8;
 
   function regionOf(byteIndex: number): 'c̃' | 'z' | 'h' {

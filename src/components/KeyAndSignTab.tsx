@@ -134,11 +134,21 @@ export default function KeyAndSignTab({
         const reader = new FileReader();
         reader.onload = (evt) => {
             try {
-                const parsed: KeyBundle = JSON.parse(evt.target?.result as string);
-                if (!parsed.publicKey || !parsed.privateKey) throw new Error('Missing key fields');
-                if (parsed.variant && parsed.variant !== variant) onVariantChange(parsed.variant);
+                const parsed = JSON.parse(evt.target?.result as string);
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                    throw new Error('Invalid JSON format: expected an object');
+                }
+                if (typeof parsed.publicKey !== 'string' || typeof parsed.privateKey !== 'string') {
+                    throw new Error('Missing or invalid key fields');
+                }
+                const allowedVariants: MLDSAVariant[] = ['ML-DSA-44', 'ML-DSA-65', 'ML-DSA-87'];
+                if (parsed.variant && typeof parsed.variant === 'string' && allowedVariants.includes(parsed.variant as MLDSAVariant) && parsed.variant !== variant) {
+                    onVariantChange(parsed.variant as MLDSAVariant);
+                }
                 setState(p => ({ ...p, genKeys: { publicKey: parsed.publicKey, privateKey: parsed.privateKey }, genSignature: '' }));
-            } catch { setImportError('Invalid key bundle file.'); }
+            } catch (err: any) {
+                setImportError(err.message || 'Invalid key bundle file.');
+            }
         };
         reader.readAsText(file);
         e.target.value = '';

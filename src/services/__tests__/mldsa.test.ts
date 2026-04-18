@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     generateKeyPair,
     signMessage,
@@ -184,10 +184,10 @@ describe('mldsa helpers', () => {
         expect(bytes).toHaveLength(0);
     });
 
-    it('getMLDSAInstance should return correct instance per variant', () => {
-        expect(getMLDSAInstance('ML-DSA-44')).toBeDefined();
-        expect(getMLDSAInstance('ML-DSA-65')).toBeDefined();
-        expect(getMLDSAInstance('ML-DSA-87')).toBeDefined();
+    it('getMLDSAInstance should throw for unrecognized variant', () => {
+        expect(getMLDSAInstance('ML-DSA-44' as any)).toBeDefined();
+        // @ts-ignore
+        expect(() => getMLDSAInstance('INVALID')).toThrow(/Unknown ML-DSA variant: INVALID/);
     });
 });
 
@@ -313,6 +313,12 @@ describe('inspectSignature components', () => {
         expect(result.valid).toBe(false);
         expect(result.error).toMatch(/contextRawHex is malformed/);
     });
+
+    it('signMessage throws on malformed contextRawHex', () => {
+        const { privateKey } = getKeys('ML-DSA-44');
+        expect(() => signMessage('ML-DSA-44', privateKey, 'msg', pureOpts({ contextRawHex: 'xyz' })))
+            .toThrow(/contextRawHex is malformed/);
+    });
 });
 
 // ─── New: analyzeSignature ────────────────────────────────────────────────────
@@ -326,11 +332,11 @@ describe('analyzeSignature', () => {
 
         expect(a.lengthOk).toBe(true);
         expect(a.totalBytes).toBe(p.sigBytes);
-        expect(a.cTildeBytes).toBe(p.lambda / 8);
+        expect(a.cTildeBytes).toBe(p.lambda / 4);
         expect(a.zSizeBytes).toBe((p.l * 256 * p.z_bits) / 8);
         expect(a.hSizeBytes).toBe(p.omega + p.k);
-        expect(a.zOffsetBytes).toBe(p.lambda / 8);
-        expect(a.hOffsetBytes).toBe(p.lambda / 8 + (p.l * 256 * p.z_bits) / 8);
+        expect(a.zOffsetBytes).toBe(p.lambda / 4);
+        expect(a.hOffsetBytes).toBe(p.lambda / 4 + (p.l * 256 * p.z_bits) / 8);
     });
 
     it.each(VARIANTS)('%s: cTildeHex length = cTildeBytes × 2', (variant) => {
@@ -481,6 +487,32 @@ describe('testMalleability', () => {
         for (const r of results) {
             expect(['c̃', 'z', 'h']).toContain(r.region);
         }
+    });
+
+    it('regionOf labels sampled bits correctly based on offsets', async () => {
+        const variant = 'ML-DSA-44';
+        const p = VARIANT_PARAMS[variant];
+        const { publicKey, privateKey } = getKeys(variant);
+        const sig = signMessage(variant, privateKey, 'msg', pureOpts());
+        const sigLen = hexToUint8Array(sig).length;
+        
+        // Large stride to avoid timeouts, we just want to see some region labels
+        const results = await testMalleability(variant, publicKey, sig, new Uint8Array(), pureOpts(), 512);
+        
+        for (const r of results) {
+            const expected = r.byteIndex < p.lambda / 4 ? 'c̃' : (r.byteIndex < (p.lambda / 4 + (p.l * 256 * p.z_bits) / 8) ? 'z' : 'h');
+            expect(r.region).toBe(expected);
+        }
+    });
+
+    it('supports malleability testing in preHash mode', async () => {
+        const { publicKey, privateKey } = getKeys('ML-DSA-44');
+        const msg = new TextEncoder().encode('msg');
+        const opts = { mode: 'hash-ml-dsa' as const, hashAlg: 'SHA-256' as const, contextText: '' };
+        const sig = signMessage('ML-DSA-44', privateKey, msg, opts);
+        const results = await testMalleability('ML-DSA-44', publicKey, sig, msg, opts, 512);
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.every(r => r.stillValid === false)).toBe(true);
     });
 
     it('byteIndex and bitIndex are in valid ranges', async () => {
