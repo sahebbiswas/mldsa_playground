@@ -146,7 +146,7 @@ describe('KatTab', () => {
 
         // Now load expected results
         const mockExpectedFile = new File(['{"results": []}'], 'expected.json');
-        (katService.parseExpectedResults as any).mockReturnValue(new Map([[1, { testPassed: true }]]));
+        (katService.parseExpectedResults as any).mockReturnValue(new Map([[1, new Map([[1, { testPassed: true }]])]]));
         
         fireEvent.change(expectedInput, { target: { files: [mockExpectedFile] } });
 

@@ -54,6 +54,8 @@ describe('KeyAndSignTab', () => {
 
     afterEach(() => {
         cleanup();
+        vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
     it('renders initial state with variant selector', () => {
@@ -174,5 +176,66 @@ describe('KeyAndSignTab', () => {
         await waitFor(() => {
             expect(mockSetState).toHaveBeenCalled();
         }, { timeout: 5000 });
+    });
+    
+    it('shows error on invalid JSON import (array)', async () => {
+        const mockReader = {
+            readAsText: vi.fn(function(this: any) {
+                if (this.onload) this.onload({ target: { result: JSON.stringify([{ a: 1 }]) } });
+            }),
+            onload: null as any
+        };
+        vi.stubGlobal('FileReader', function() { return mockReader; });
+
+        const { container } = render(
+            <KeyAndSignTab variant="ML-DSA-44" onVariantChange={mockOnVariantChange} onSendToInspector={mockOnSendToInspector} state={mockState} setState={mockSetState} />
+        );
+        const input = container.querySelector('input[accept=".json"]')!;
+        fireEvent.change(input, { target: { files: [new File(['[]'], 'test.json')] } });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Invalid JSON format: expected an object/i)).toBeDefined();
+            expect(mockSetState).not.toHaveBeenCalled();
+        });
+    });
+
+    it('shows error on JSON import missing keys', async () => {
+        const mockReader = {
+            readAsText: vi.fn(function(this: any) {
+                if (this.onload) this.onload({ target: { result: JSON.stringify({ variant: 'ML-DSA-44' }) } });
+            }),
+            onload: null as any
+        };
+        vi.stubGlobal('FileReader', function() { return mockReader; });
+
+        const { container } = render(
+            <KeyAndSignTab variant="ML-DSA-44" onVariantChange={mockOnVariantChange} onSendToInspector={mockOnSendToInspector} state={mockState} setState={mockSetState} />
+        );
+        const input = container.querySelector('input[accept=".json"]')!;
+        fireEvent.change(input, { target: { files: [new File(['{}'], 'test.json')] } });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Missing or invalid key fields/i)).toBeDefined();
+        });
+    });
+
+    it('shows error on JSON import with non-string keys', async () => {
+        const mockReader = {
+            readAsText: vi.fn(function(this: any) {
+                if (this.onload) this.onload({ target: { result: JSON.stringify({ publicKey: 123, privateKey: 's' }) } });
+            }),
+            onload: null as any
+        };
+        vi.stubGlobal('FileReader', function() { return mockReader; });
+
+        const { container } = render(
+            <KeyAndSignTab variant="ML-DSA-44" onVariantChange={mockOnVariantChange} onSendToInspector={mockOnSendToInspector} state={mockState} setState={mockSetState} />
+        );
+        const input = container.querySelector('input[accept=".json"]')!;
+        fireEvent.change(input, { target: { files: [new File(['{}'], 'test.json')] } });
+
+        await waitFor(() => {
+            expect(screen.getByText(/Missing or invalid key fields/i)).toBeDefined();
+        });
     });
 });

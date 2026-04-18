@@ -7,8 +7,8 @@ import * as sharedUI from '../SharedUI';
 import React from 'react';
 
 // Mock Framer Motion
-vi.mock('motion/react', () => {
-    const React = require('react');
+vi.mock('motion/react', async () => {
+    const React = (await import('react')).default;
     const Component = React.forwardRef(({ children, initial, animate, exit, transition, ...props }: any, ref: any) => {
         return React.createElement('div', { ...props, ref }, children);
     });
@@ -162,14 +162,11 @@ describe('X509Tab', () => {
 
         // Simulate drop
         const file = new File([''], 'test.pem');
-        const dropEvent = {
-            preventDefault: vi.fn(),
-            stopPropagation: vi.fn(),
+        fireEvent.drop(dropZone, {
             dataTransfer: {
                 files: [file]
             }
-        };
-        fireEvent.drop(dropZone, dropEvent);
+        });
 
         await waitFor(() => {
             expect(screen.getByText(/Drop error/i)).toBeDefined();

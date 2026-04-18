@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { ModeBadge, HexPreview, TinyBtn, ActionRow, AdvancedOptions } from '../SharedUI';
 
 describe('SharedUI Components', () => {
@@ -85,7 +85,6 @@ describe('SharedUI Components', () => {
         it('updates context when input changes', () => {
             render(<AdvancedOptions {...defaultProps} />);
             const input = screen.getByPlaceholderText(/context string/i);
-            const { fireEvent } = require('@testing-library/react');
             fireEvent.change(input, { target: { value: 'new-ctx' } });
             expect(defaultProps.onContextChange).toHaveBeenCalledWith('new-ctx');
             cleanup();

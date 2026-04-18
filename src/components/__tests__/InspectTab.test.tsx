@@ -18,7 +18,7 @@ vi.mock('motion/react', () => {
 });
 
 // Mock components
-vi.mock('./SignatureAnalysisPanel', () => ({
+vi.mock('../SignatureAnalysisPanel', () => ({
     default: () => <div>SignatureAnalysisPanel</div>
 }));
 

@@ -16,8 +16,8 @@ vi.mock('motion/react', () => {
     };
 });
 
-vi.mock('../../services/mldsa', () => {
-    const original = vi.importActual('../../services/mldsa');
+vi.mock('../../services/mldsa', async (importOriginal) => {
+    const original = await importOriginal<typeof import('../../services/mldsa')>();
     return {
         ...original,
         analyzeSignature: vi.fn(),

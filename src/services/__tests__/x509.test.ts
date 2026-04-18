@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import * as asn1js from 'asn1js';
+import * as pkijs from 'pkijs';
 import { parseCertificate, processCertificateBytes, verifyX509Signature, MLDSA_OIDS } from '../x509';
 import { generateKeyPair, signMessage, hexToUint8Array } from '../mldsa';
 
@@ -92,9 +93,9 @@ describe('x509 service', () => {
         });
 
         it('should return error when pkijs.Certificate throws', () => {
-            const asn = new asn1js.Integer({ value: 1 });
-            const der = asn.toBER(false);
-            const result = parseCertificate(new Uint8Array(der));
+            // Since we can't naturally spyOn exports in ESM, we trigger the constructor failure
+            // by passing an invalid but parseable ASN.1 structure (empty sequence)
+            const result = parseCertificate(new Uint8Array([0x30, 0x00])); 
             expect(result.valid).toBe(false);
             expect(result.error).toBeDefined();
         });

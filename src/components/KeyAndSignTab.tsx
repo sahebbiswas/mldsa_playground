@@ -146,7 +146,9 @@ export default function KeyAndSignTab({
                     onVariantChange(parsed.variant as MLDSAVariant);
                 }
                 setState(p => ({ ...p, genKeys: { publicKey: parsed.publicKey, privateKey: parsed.privateKey }, genSignature: '' }));
-            } catch { setImportError('Invalid key bundle file.'); }
+            } catch (err: any) {
+                setImportError(err.message || 'Invalid key bundle file.');
+            }
         };
         reader.readAsText(file);
         e.target.value = '';
