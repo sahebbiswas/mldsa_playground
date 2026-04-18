@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import SignatureAnalysisPanel from '../SignatureAnalysisPanel';
 import * as mldsaService from '../../services/mldsa';
@@ -50,7 +50,7 @@ describe('SignatureAnalysisPanel', () => {
         publicKey: 'pub',
         signatureHex: 'sig',
         message: new Uint8Array([1, 2, 3]),
-        opts: { mode: 'pure' as const, contextText: '' },
+        opts: { mode: 'pure' as const, contextText: '', hashAlg: 'SHA-256' as const },
     };
 
     beforeEach(() => {
